@@ -1,6 +1,6 @@
 # Shiny App Project - Moteur de recherche BFS
 
-Application Shiny pour rechercher et télécharger des données du Office fédérale de la statistique (BFS) et les données de Swiss Stat Explorer (SSE). Le package utilise directement les fonctions developpées par @lgnbhl dans la librairie BFS : (github:  https://github.com/lgnbhl/BFS) (CRAN:  https://cloud.r-project.org/web/packages/BFS/index.html)
+Application Shiny pour rechercher et télécharger des données de l'Office fédérale de la statistique (BFS) et les données de Swiss Stat Explorer (SSE). Le package utilise directement les fonctions developpées par @lgnbhl dans la librairie BFS : (github:  https://github.com/lgnbhl/BFS) (CRAN:  https://cloud.r-project.org/web/packages/BFS/index.html)
 
 ## Fonctionnalités
 
