@@ -1,95 +1,32 @@
 # Shiny App Project - Moteur de recherche BFS
 
-Application Shiny développée avec R et renv dans DevPod pour rechercher et télécharger des données du Bureau fédéral de la statistique (BFS) suisse.
+Application Shiny pour rechercher et télécharger des données du Office fédérale de la statistique (BFS) et les données de Swiss Stat Explorer (SSE). Le package utilise directement les fonctions developpé par @lgnbhl dans la librairie BFS : (github:  https://github.com/lgnbhl/BFS) (CRAN:  https://cloud.r-project.org/web/packages/BFS/index.html)
 
 ## Fonctionnalités
 
-- 🔍 Recherche de datasets dans le catalogue BFS en français
-- 📊 Sélection et visualisation de datasets
-- 🎛️ Génération dynamique de filtres basés sur les métadonnées
-- 📥 Interrogation et téléchargement de données filtrées
-- 💾 Export des résultats au format CSV
+- Recherche de datasets dans le catalogue OFS en français
+- Accès aux datasets Swiss Stat Explorer
+- Sélection et visualisation de datasets
+- Génération dynamique de filtres basés sur les métadonnées
+- Interrogation et téléchargement de données filtrées
+- Génération du code R pour intégration du script
+- Export des résultats au format CSV
 
-## Prérequis
+## Installation
 
-- DevPod configuré
-- Docker
-- Packages R : shiny, BFS, dplyr, DT, shinycssloaders, tidyr
-
-## Structure du projet
-
-- `.devcontainer/devcontainer.json` : Configuration DevPod avec build personnalisé
-- `Dockerfile` : Image Docker basée sur rocker/shiny-verse avec outils DevPod
-- `DESCRIPTION` : Métadonnées du package R (structure Golem)
-- `NAMESPACE` : Espace de noms R
-- `R/` : Code source de l'application
-  - `app_ui.R` : Interface utilisateur
-  - `app_server.R` : Logique serveur
-  - `run_app.R` : Fonction pour lancer l'application
-  - `app_config.R` : Configuration
-  - `utils_js.R` : Utilitaires JavaScript
-  - `utils_ui.R` : Utilitaires UI
-- `install_packages.R` : Script d'installation des packages requis
-- `GOLEM_README.md` : Documentation de la structure Golem
-- `USAGE.md` : Guide d'utilisation détaillé
-- `API_swissstatexplorer.md` : Documentation de l'API BFS
-- `renv/` : Environnement R isolé (généré automatiquement)
-- `.Rprofile` : Active automatiquement renv
-- `TROUBLESHOOTING.md` : Guide de dépannage pour les erreurs courantes
-
-## Installation et démarrage
-
-1. Ouvrir le projet dans DevPod
-2. L'environnement renv sera restauré automatiquement
-3. Installer les packages requis (si nécessaire) :
-   ```r
-   source("install_packages.R")
-   ```
-4. Lancer l'application Shiny :
-   ```r
-   # Charger le package
-   devtools::load_all()
-   
-   # Lancer l'application
-   bfssearch::run_app()
-   ```
-   
-   Ou avec des options spécifiques :
-   ```r
-   bfssearch::run_app(options = list(host = "0.0.0.0", port = 3838))
-   ```
-5. L'application sera accessible sur le port 3838
-
-## Utilisation rapide
-
-1. **Recherche** : Entrez un terme de recherche (ex: "étudiants", "population")
-2. **Sélection** : Cliquez sur un dataset dans les résultats
-3. **Filtres** : Configurez les filtres dynamiques générés automatiquement
-4. **Téléchargement** : Interrogez et téléchargez les données filtrées
-
-Pour plus de détails, consultez le [Guide d'utilisation](USAGE.md).
-
-## Ajouter des packages
-
-```r
-# Installer un package
-install.packages("nom_du_package")
-
-# Sauvegarder dans renv
-renv::snapshot()
+``` R
+devtools::install_github('jonaspipoz/bfssearch')
 ```
 
-## Image Docker
+## Usage
 
-Le projet utilise un Dockerfile personnalisé basé sur `rocker/shiny-verse:latest` qui inclut :
-- R
-- Shiny
-- Tidyverse
-- Outils de développement
-- Outils nécessaires pour DevPod (curl, procps, openssh-client, etc.)
+``` R
+# Lancement de l'app shiny
+bfssearch::run_app()
+```
 
-L'image est construite automatiquement lors du premier démarrage de DevPod.
+## Information
 
-## Dépannage
+- Ce package n'est pas mis à disposition ni maintenu par l'Office Fédérale de la Statistique. 
 
-Si vous rencontrez des erreurs, consultez le fichier `TROUBLESHOOTING.md` pour des solutions détaillées.
+
