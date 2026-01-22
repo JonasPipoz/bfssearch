@@ -1,0 +1,57 @@
+{
+  "name": "R Shiny Development",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": ".."
+  },
+  
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "REditorSupport.r",
+        "quarto-dev.quarto"
+      ],
+      "settings": {
+        "r.rterm.linux": "/usr/bin/R",
+        "r.rpath.linux": "/usr/bin/R",
+        "r.alwaysUseActiveTerminal": true,
+        "r.bracketedPaste": true
+      }
+    }
+  },
+
+  "postCreateCommand": "Rscript --vanilla -e 'if (!requireNamespace(\"renv\", quietly = TRUE)) install.packages(\"renv\", repos = \"https://cloud.r-project.org\"); if (file.exists(\"renv.lock\")) renv::restore()'",
+  
+  "forwardPorts": [3838],
+  "portsAttributes": {
+    "3838": {
+      "label": "Shiny App",
+      "onAutoForward": "notify"
+    }
+  },
+
+  "remoteUser": "root",
+  "remoteEnv": {
+    "RENV_PATHS_ROOT": "/renv"
+  },
+
+  // --- CORRECTION ICI ---
+  // On force le montage vers le dossier attendu
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/shinyapp,type=bind",
+  "workspaceFolder": "/workspaces/shinyapp",
+  // ----------------------
+
+  "runArgs": [
+    "--shm-size=2gb",
+    "--init"
+  ],
+
+  "overrideCommand": false,
+  "containerEnv": {
+    "DEVPOD": "true"
+  }
+}

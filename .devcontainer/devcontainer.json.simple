@@ -1,0 +1,50 @@
+{
+  "name": "R Shiny Development (Simple)",
+  "image": "rocker/shiny-verse:latest",
+  
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "REditorSupport.r",
+        "quarto-dev.quarto"
+      ],
+      "settings": {
+        "r.rterm.linux": "/usr/bin/R",
+        "r.rpath.linux": "/usr/bin/R",
+        "r.alwaysUseActiveTerminal": true,
+        "r.bracketedPaste": true
+      }
+    }
+  },
+
+  "postCreateCommand": "apt-get update && apt-get install -y procps curl openssh-client || true && Rscript -e 'if (!requireNamespace(\"renv\", quietly = TRUE)) install.packages(\"renv\"); if (file.exists(\"renv.lock\")) renv::restore()'",
+
+  "forwardPorts": [3838],
+  "portsAttributes": {
+    "3838": {
+      "label": "Shiny App",
+      "onAutoForward": "notify"
+    }
+  },
+
+  "remoteUser": "root",
+  "remoteEnv": {
+    "RENV_PATHS_ROOT": "/renv"
+  },
+
+  "workspaceFolder": "/workspace",
+
+  "runArgs": [
+    "--shm-size=2gb",
+    "--init"
+  ],
+
+  "overrideCommand": false,
+  "containerEnv": {
+    "DEVPOD": "true"
+  }
+}

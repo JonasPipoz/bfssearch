@@ -1,0 +1,26 @@
+# R
+.Rhistory
+.Rapp.history
+.RData
+.Ruserdata
+*.Rproj
+*.Rproj.user
+
+# renv
+renv/library/
+renv/python/
+renv/staging/
+renv/.gitignore
+renv/activate.R
+renv/settings.json
+
+# Shiny
+rsconnect/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

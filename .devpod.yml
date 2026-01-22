@@ -1,0 +1,9 @@
+# Configuration DevPod alternative
+# Si vous rencontrez des problèmes avec Kubernetes, 
+# décommentez la ligne suivante pour utiliser Docker :
+# provider: docker
+
+# Configuration des ressources (optionnel)
+# resources:
+#   cpu: "2"
+#   memory: "4Gi"
