@@ -1,5 +1,6 @@
 #' @title Interface utilisateur de l'application
 #' @description UI principale de l'application BFS Search
+#' 
 #' @noRd
 
 app_ui <- function(request) {
@@ -114,7 +115,7 @@ app_ui <- function(request) {
             br(),
             verbatimTextOutput("search_status"),
             br(),
-            withSpinner(
+            shinycssloaders::withSpinner(
               DT::dataTableOutput("catalog_table"),
               type = 4,
               color = "#0dc5c1"
@@ -146,7 +147,7 @@ app_ui <- function(request) {
             br(),
             downloadButton("download_data", "Télécharger CSV", class = "btn-info"),
             br(), br(),
-            withSpinner(
+            shinycssloaders::withSpinner(
               DT::dataTableOutput("data_table"),
               type = 4,
               color = "#0dc5c1"

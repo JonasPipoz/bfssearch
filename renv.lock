@@ -1,6 +1,6 @@
 {
   "R": {
-    "Version": "4.5.2",
+    "Version": "4.3.1",
     "Repositories": [
       {
         "Name": "CRAN",
@@ -51,7 +51,7 @@
       "BugReports": "https://github.com/lgnbhl/BFS/issues",
       "Config/testthat/edition": "3",
       "LazyData": "true",
-      "Author": "Felix Luginbuhl [aut, cre, cph] (ORCID: <https://orcid.org/0009-0008-6625-2899>), Marius Hodel [ctb] (ORCID: <https://orcid.org/0000-0001-8789-506X>), Janosch Brenzel-Weiss [ctb], Joao Martins [ctb], Philipp Baumann [ctb] (ORCID: <https://orcid.org/0000-0002-3194-8975>)",
+      "Author": "Felix Luginbuhl [aut, cre, cph] (<https://orcid.org/0009-0008-6625-2899>), Marius Hodel [ctb] (<https://orcid.org/0000-0001-8789-506X>), Janosch Brenzel-Weiss [ctb], Joao Martins [ctb], Philipp Baumann [ctb] (<https://orcid.org/0000-0002-3194-8975>)",
       "RemoteType": "github",
       "RemoteHost": "api.github.com",
       "RemoteUsername": "lgnbhl",
@@ -1901,7 +1901,8 @@
       "NeedsCompilation": "yes",
       "Author": "Hadley Wickham [aut, cre], RStudio [cph]",
       "Maintainer": "Hadley Wickham <hadley@rstudio.com>",
-      "Repository": "CRAN"
+      "Repository": "RSPM",
+      "Encoding": "UTF-8"
     },
     "lifecycle": {
       "Package": "lifecycle",
@@ -3273,7 +3274,8 @@
       "NeedsCompilation": "no",
       "Author": "Simon Potter [aut, trl, cre], Simon Sapin [aut], Ian Bicking [aut]",
       "Maintainer": "Simon Potter <simon@sjp.co.nz>",
-      "Repository": "CRAN"
+      "Repository": "RSPM",
+      "Encoding": "UTF-8"
     },
     "sessioninfo": {
       "Package": "sessioninfo",
