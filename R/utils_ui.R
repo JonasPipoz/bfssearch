@@ -25,6 +25,24 @@ get_sse_modal <- function() {
         ),
         tags$div(
           class = "modal-body",
+          tags$h5("Méthode 1 : Recherche par mot-clé"),
+          tags$p(
+            "Vous pouvez rechercher un dataset en utilisant un mot-clé dans le champ de recherche.",
+            tags$br(),
+            tags$strong("Langues acceptées :"),
+            " La recherche fonctionne avec des mots-clés en ",
+            tags$strong("anglais"), " ou ", tags$strong("allemand"), 
+            " (les noms des datasets sont principalement en anglais).",
+            tags$br(),
+            tags$small(
+              tags$strong("Exemples :"), 
+              tags$code("housing"), ", ", tags$code("population"), 
+              ", ", tags$code("education"), ", ", tags$code("Wohnung"), 
+              ", ", tags$code("Bevölkerung"), " etc."
+            )
+          ),
+          tags$hr(),
+          tags$h5("Méthode 2 : Recherche par numéro BFS"),
           tags$ol(
             tags$li(
               tags$strong("Se rendre à l'adresse :"),

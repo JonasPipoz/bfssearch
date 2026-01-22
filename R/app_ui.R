@@ -51,16 +51,27 @@ app_ui <- function(request) {
           )
         ),
         
-        # Champ pour number_bfs (pour SSE)
-        conditionalPanel(
-          condition = "input.api_type == 'sse'",
+      # Champ pour SSE (recherche ou numéro direct)
+      conditionalPanel(
+        condition = "input.api_type == 'sse'",
+        tags$div(
+          h5("Recherche dans le catalogue SSE"),
+          textInput(
+            "sse_search_term",
+            label = "Rechercher un dataset",
+            placeholder = "Ex: logement, population, étudiants..."
+          ),
+          tags$small("Ou entrez directement le numéro BFS ci-dessous"),
+          hr(),
+          h5("Ou numéro BFS direct"),
           textInput(
             "sse_number_bfs",
             label = "Numéro BFS (SSE)",
             placeholder = "Ex: DF_LWZ_1"
           ),
           tags$small("Entrez le numéro BFS du dataset SSE (ex: DF_LWZ_1)")
-        ),
+        )
+      ),
         
         # Bouton de recherche
         actionButton("search_btn", "Rechercher", class = "btn-primary", width = "100%"),

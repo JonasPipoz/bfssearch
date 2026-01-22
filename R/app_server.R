@@ -69,37 +69,69 @@ app_server <- function(input, output, session) {
         catalog_results(NULL)
       })
     } else if (input$api_type == "sse") {
-      # Pour SSE, charger directement les métadonnées
-      req(input$sse_number_bfs)
-      
-      showNotification("Chargement des métadonnées SSE...", type = "message")
-      
-      tryCatch({
-        # Charger le codelist SSE
-        codelist <- BFS::bfs_get_sse_metadata(
-          number_bfs = input$sse_number_bfs,
-          language = "fr"
-        )
+      # Pour SSE, vérifier si recherche ou numéro direct
+      if (!is.null(input$sse_search_term) && input$sse_search_term != "") {
+        # Recherche dans le catalogue SSE
+        showNotification("Recherche dans le catalogue SSE...", type = "message")
         
-        sse_codelist(codelist)
+        tryCatch({
+          # Utiliser la fonction de recherche SSE
+          results <- search_swiss_stats(keyword = input$sse_search_term, language = "fr")
+          
+          if (nrow(results) == 0) {
+            showNotification("Aucun résultat trouvé. Essayez un autre terme de recherche.", type = "warning")
+            catalog_results(NULL)
+          } else {
+            # Adapter les résultats au format attendu
+            results_formatted <- results |>
+              dplyr::mutate(
+                title = name,
+                number_bfs = id,
+                publication_date = Sys.Date(),
+                language_available = "fr"
+              ) |>
+              dplyr::select(title, number_bfs, publication_date, language_available, id, agencyID, version)
+            
+            catalog_results(results_formatted)
+            showNotification(paste(nrow(results), "dataset(s) SSE trouvé(s)"), type = "message")
+          }
+        }, error = function(e) {
+          showNotification(paste("Erreur lors de la recherche SSE:", e$message), type = "error")
+          catalog_results(NULL)
+        })
+      } else if (!is.null(input$sse_number_bfs) && input$sse_number_bfs != "") {
+        # Charger directement les métadonnées avec le numéro BFS
+        showNotification("Chargement des métadonnées SSE...", type = "message")
         
-        # Créer un dataset factice pour la compatibilité
-        fake_dataset <- data.frame(
-          title = paste0("Dataset SSE: ", input$sse_number_bfs),
-          number_bfs = input$sse_number_bfs,
-          publication_date = Sys.Date(),
-          language_available = "fr"
-        )
-        selected_dataset(fake_dataset)
-        
-        # Passer directement à l'onglet de configuration
-        updateTabsetPanel(session, "main_tabs", selected = "Configuration des filtres")
-        
-        showNotification("Métadonnées SSE chargées avec succès", type = "message")
-      }, error = function(e) {
-        showNotification(paste("Erreur lors du chargement SSE:", e$message), type = "error")
-        sse_codelist(NULL)
-      })
+        tryCatch({
+          # Charger le codelist SSE
+          codelist <- BFS::bfs_get_sse_metadata(
+            number_bfs = input$sse_number_bfs,
+            language = "fr"
+          )
+          
+          sse_codelist(codelist)
+          
+          # Créer un dataset factice pour la compatibilité
+          fake_dataset <- data.frame(
+            title = paste0("Dataset SSE: ", input$sse_number_bfs),
+            number_bfs = input$sse_number_bfs,
+            publication_date = Sys.Date(),
+            language_available = "fr"
+          )
+          selected_dataset(fake_dataset)
+          
+          # Passer directement à l'onglet de configuration
+          updateTabsetPanel(session, "main_tabs", selected = "Configuration des filtres")
+          
+          showNotification("Métadonnées SSE chargées avec succès", type = "message")
+        }, error = function(e) {
+          showNotification(paste("Erreur lors du chargement SSE:", e$message), type = "error")
+          sse_codelist(NULL)
+        })
+      } else {
+        showNotification("Veuillez entrer un terme de recherche ou un numéro BFS", type = "warning")
+      }
     }
   })
   
@@ -114,7 +146,8 @@ app_server <- function(input, output, session) {
     available_cols <- colnames(results_df)
     
     # Colonnes préférées à afficher (dans l'ordre)
-    preferred_cols <- c("title", "number_bfs", "publication_date", "language_available", "language", "number_asset")
+    # Pour SSE, on a aussi id, agencyID, version
+    preferred_cols <- c("title", "number_bfs", "id", "publication_date", "language_available", "language", "number_asset", "agencyID", "version")
     
     # Sélectionner les colonnes disponibles
     cols_to_show <- preferred_cols[preferred_cols %in% available_cols]
@@ -163,10 +196,36 @@ app_server <- function(input, output, session) {
       # Changer vers l'onglet de configuration
       updateTabsetPanel(session, "main_tabs", selected = "Configuration des filtres")
       
-      # Charger les métadonnées
-      load_metadata(selected_row$number_bfs)
+      # Charger les métadonnées selon le type d'API
+      if (input$api_type == "sse") {
+        # Pour SSE, charger directement le codelist
+        load_sse_metadata(selected_row$number_bfs)
+      } else {
+        # Pour BFS Catalog, charger les métadonnées normales
+        load_metadata(selected_row$number_bfs)
+      }
     }
   })
+  
+  # Fonction pour charger les métadonnées SSE
+  load_sse_metadata <- function(number_bfs) {
+    showNotification("Chargement des métadonnées SSE...", type = "message")
+    
+    tryCatch({
+      # Charger le codelist SSE
+      codelist <- BFS::bfs_get_sse_metadata(
+        number_bfs = number_bfs,
+        language = "fr"
+      )
+      
+      sse_codelist(codelist)
+      showNotification("Métadonnées SSE chargées avec succès", type = "message")
+      
+    }, error = function(e) {
+      showNotification(paste("Erreur lors du chargement des métadonnées SSE:", e$message), type = "error")
+      sse_codelist(NULL)
+    })
+  }
   
   # Fonction pour charger les métadonnées
   load_metadata <- function(number_bfs) {
