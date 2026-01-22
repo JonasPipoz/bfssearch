@@ -1,0 +1,28 @@
+Package: bfssearch
+Title: Moteur de recherche BFS - Office federal de la statistique
+Version: 0.0.0.9000
+Authors@R: 
+    person("Your Name", "Your Role", email = "your.email@example.com", role = c("aut", "cre"))
+Description: Application Shiny pour rechercher et télécharger des données du Bureau fédéral de la statistique (BFS) suisse en utilisant les APIs BFS Catalog (PXWeb) et Swiss Stats Explorer.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Depends: 
+    R (>= 4.0.0)
+Imports:
+    shiny,
+    BFS,
+    dplyr,
+    DT,
+    shinycssloaders,
+    tidyr,
+    magrittr,
+    tools
+Suggests:
+    testthat (>= 3.0.0),
+    covr
+Remotes:
+    github::lgnbhl/BFS
+Config/testthat/edition: 3

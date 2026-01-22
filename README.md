@@ -20,8 +20,17 @@ Application Shiny développée avec R et renv dans DevPod pour rechercher et té
 
 - `.devcontainer/devcontainer.json` : Configuration DevPod avec build personnalisé
 - `Dockerfile` : Image Docker basée sur rocker/shiny-verse avec outils DevPod
-- `app.R` : Application Shiny principale (moteur de recherche BFS)
+- `DESCRIPTION` : Métadonnées du package R (structure Golem)
+- `NAMESPACE` : Espace de noms R
+- `R/` : Code source de l'application
+  - `app_ui.R` : Interface utilisateur
+  - `app_server.R` : Logique serveur
+  - `run_app.R` : Fonction pour lancer l'application
+  - `app_config.R` : Configuration
+  - `utils_js.R` : Utilitaires JavaScript
+  - `utils_ui.R` : Utilitaires UI
 - `install_packages.R` : Script d'installation des packages requis
+- `GOLEM_README.md` : Documentation de la structure Golem
 - `USAGE.md` : Guide d'utilisation détaillé
 - `API_swissstatexplorer.md` : Documentation de l'API BFS
 - `renv/` : Environnement R isolé (généré automatiquement)
@@ -38,7 +47,16 @@ Application Shiny développée avec R et renv dans DevPod pour rechercher et té
    ```
 4. Lancer l'application Shiny :
    ```r
-   shiny::runApp("app.R", host = "0.0.0.0", port = 3838)
+   # Charger le package
+   devtools::load_all()
+   
+   # Lancer l'application
+   bfssearch::run_app()
+   ```
+   
+   Ou avec des options spécifiques :
+   ```r
+   bfssearch::run_app(options = list(host = "0.0.0.0", port = 3838))
    ```
 5. L'application sera accessible sur le port 3838
 

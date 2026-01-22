@@ -1,0 +1,10 @@
+production:
+  status: default
+  golem_name: bfssearch
+  golem_version: 0.0.0.9000
+  app_prod: FALSE
+dev:
+  golem_name: bfssearch
+  golem_version: 0.0.0.9000
+  golem_wd: ~
+  app_prod: FALSE

@@ -1,317 +1,17 @@
-#
-# Application Shiny pour rechercher et télécharger des données du BFS
-# Basée sur l'API Swiss Stats Explorer
-#
+#' @title Logique serveur de l'application
+#' @description Server principal de l'application BFS Search
+#' @noRd
 
-library(shiny)
-library(BFS)
-library(dplyr)
-library(DT)
-library(shinycssloaders)
-library(tidyr)
-
-# Interface utilisateur
-ui <- fluidPage(
-  # JavaScript pour copier dans le presse-papiers et gérer le modal
-  tags$script("
-    Shiny.addCustomMessageHandler('copyToClipboard', function(message) {
-      var textarea = document.createElement('textarea');
-      textarea.value = message;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.select();
-      try {
-        document.execCommand('copy');
-      } catch (err) {
-        console.error('Erreur lors de la copie:', err);
-      }
-      document.body.removeChild(textarea);
-    });
-    
-    // Gérer le modal SSE
-    Shiny.addCustomMessageHandler('showSSEModal', function(message) {
-      $('#sse_modal').modal('show');
-    });
-    
-    // Empêcher le changement de radio button quand on clique sur le lien info
-    $(document).on('click', '#sse_info_btn', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      $('#sse_modal').modal('show');
-      return false;
-    });
-  "),
+app_server <- function(input, output, session) {
   
-  # Modal pour les instructions SSE
-  tags$div(
-    id = "sse_modal",
-    class = "modal fade",
-    tabindex = "-1",
-    role = "dialog",
-    tags$div(
-      class = "modal-dialog",
-      role = "document",
-      tags$div(
-        class = "modal-content",
-        tags$div(
-          class = "modal-header",
-          tags$h4(class = "modal-title", "Comment trouver un dataset Swiss Stats Explorer"),
-          tags$button(
-            type = "button",
-            class = "close",
-            `data-dismiss` = "modal",
-            `aria-label` = "Fermer",
-            tags$span(`aria-hidden` = "true", "×")
-          )
-        ),
-        tags$div(
-          class = "modal-body",
-          tags$ol(
-            tags$li(
-              tags$strong("Se rendre à l'adresse :"),
-              tags$a(href = "https://stats.swiss/?lc=fr", target = "_blank", "https://stats.swiss/?lc=fr")
-            ),
-            tags$li("Rechercher un dataset"),
-            tags$li(
-              "Dans la page du dataset, cliquer sur ",
-              tags$code("\"Libellés > Identifiant\""),
-              " et copier l'identifiant du dataset pour l'entrer dans l'application",
-              tags$br(),
-              tags$small("Exemple: ", tags$code("DF_GWS_REG6"), style = "color: #666;")
-            )
-          ),
-          tags$div(
-            class = "alert alert-info",
-            style = "margin-top: 15px;",
-            tags$p(
-              tags$strong("Note:"),
-              " L'identifiant du dataset commence généralement par ",
-              tags$code("DF_"),
-              " ou ",
-              tags$code("px-"),
-              " et peut être trouvé dans l'URL ou dans les métadonnées du dataset."
-            )
-          )
-        ),
-        tags$div(
-          class = "modal-footer",
-          tags$button(
-            type = "button",
-            class = "btn btn-default",
-            `data-dismiss` = "modal",
-            "Fermer"
-          )
-        )
-      )
-    )
-  ),
-  
-  # CSS pour le modal
-  tags$style("
-    .modal-header {
-      background-color: #f5f5f5;
-      border-bottom: 1px solid #ddd;
+  # Fonction utilitaire pour formater les noms de variables avec backticks si nécessaire
+  format_var_name <- function(var_name) {
+    # Si le nom contient des espaces ou des caractères spéciaux, utiliser des backticks
+    if (grepl("[^a-zA-Z0-9._]", var_name)) {
+      return(paste0("`", var_name, "`"))
     }
-    .modal-body ol {
-      padding-left: 20px;
-    }
-    .modal-body li {
-      margin-bottom: 10px;
-    }
-    .modal-body code {
-      background-color: #f4f4f4;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-size: 0.9em;
-    }
-  "),
-  
-  titlePanel("Moteur de recherche BFS - Office fédéral de la statistique"),
-  
-  # Sidebar pour la recherche
-  sidebarLayout(
-    sidebarPanel(
-      width = 3,
-      h4("Recherche de données"),
-      
-      # Sélecteur de type d'API
-      tags$div(
-        tags$label("Type d'API", class = "control-label"),
-        radioButtons(
-          "api_type",
-          label = NULL,
-          choices = list(
-            "BFS Catalog (PXWeb)" = "catalog",
-            "Swiss Stats Explorer" = "sse"
-          ),
-          selected = "catalog"
-        ),
-        # Icône info pour SSE
-        tags$div(
-          style = "margin-top: -10px; margin-left: 20px;",
-          actionLink("sse_info_btn", 
-                    tags$span(icon("info-circle"), " Comment trouver un dataset SSE?"),
-                    style = "font-size: 0.9em; color: #337ab7; text-decoration: none;")
-        )
-      ),
-      
-      hr(),
-      
-      # Champ de recherche (pour BFS Catalog)
-      conditionalPanel(
-        condition = "input.api_type == 'catalog'",
-        textInput(
-          "search_term",
-          label = "Terme de recherche",
-          placeholder = "Ex: étudiants, population, logement..."
-        )
-      ),
-      
-      # Champ pour number_bfs (pour SSE)
-      conditionalPanel(
-        condition = "input.api_type == 'sse'",
-        textInput(
-          "sse_number_bfs",
-          label = "Numéro BFS (SSE)",
-          placeholder = "Ex: DF_LWZ_1"
-        ),
-        tags$small("Entrez le numéro BFS du dataset SSE (ex: DF_LWZ_1)")
-      ),
-      
-      # Bouton de recherche
-      actionButton("search_btn", "Rechercher", class = "btn-primary", width = "100%"),
-      
-      br(), br(),
-      
-      # Options de recherche avancée
-      h5("Options de recherche"),
-      
-      selectInput(
-        "spatial_division",
-        label = "Division spatiale",
-        choices = c(
-          "Toutes" = "",
-          "Suisse" = "Switzerland",
-          "Cantons" = "Cantons",
-          "Districts" = "Districts",
-          "Communes" = "Communes",
-          "Autres divisions spatiales" = "Other spatial divisions",
-          "International" = "International"
-        ),
-        selected = ""
-      ),
-      
-      numericInput(
-        "limit",
-        label = "Nombre maximum de résultats",
-        value = 50,
-        min = 1,
-        max = 350
-      ),
-      
-      hr(),
-      
-      # Informations
-      h5("Instructions"),
-      p("1. Entrez un terme de recherche"),
-      p("2. Sélectionnez un dataset dans les résultats"),
-      p("3. Configurez les filtres dynamiques"),
-      p("4. Téléchargez les données")
-    ),
-    
-    # Panneau principal
-    mainPanel(
-      width = 9,
-      tabsetPanel(
-        id = "main_tabs",
-        
-        # Onglet 1: Résultats de recherche
-        tabPanel(
-          "Résultats de recherche",
-          br(),
-          verbatimTextOutput("search_status"),
-          br(),
-          withSpinner(
-            DT::dataTableOutput("catalog_table"),
-            type = 4,
-            color = "#0dc5c1"
-          ),
-          br(),
-          # Debug: afficher les colonnes disponibles
-          conditionalPanel(
-            condition = "output.catalog_table",
-            verbatimTextOutput("debug_info")
-          )
-        ),
-        
-        # Onglet 2: Configuration des filtres
-        tabPanel(
-          "Configuration des filtres",
-          br(),
-          uiOutput("dataset_info"),
-          br(),
-          uiOutput("dynamic_filters"),
-          br(),
-          actionButton("query_btn", "Interroger les données", class = "btn-success", width = "100%"),
-          br(), br(),
-          verbatimTextOutput("query_status")
-        ),
-        
-        # Onglet 3: Résultats des données
-        tabPanel(
-          "Données",
-          br(),
-          downloadButton("download_data", "Télécharger CSV", class = "btn-info"),
-          br(), br(),
-          withSpinner(
-            DT::dataTableOutput("data_table"),
-            type = 4,
-            color = "#0dc5c1"
-          ),
-          br(),
-          verbatimTextOutput("data_info")
-        ),
-        
-        # Onglet 4: Code R
-        tabPanel(
-          "Code R",
-          br(),
-          tags$div(
-            class = "alert alert-info",
-            tags$h5("Code R généré"),
-            tags$p("Copiez et collez ce code dans votre script R pour charger les données directement.")
-          ),
-          br(),
-          tags$div(
-            style = "position: relative; margin-bottom: 10px;",
-            actionButton("copy_code_btn", "📋 Copier le code", class = "btn-primary", 
-                        style = "position: absolute; top: 5px; right: 5px; z-index: 1000;"),
-            tags$pre(
-              id = "r_code_output",
-              style = "background-color: #f5f5f5; padding: 20px 100px 20px 20px; border: 1px solid #ddd; border-radius: 4px; overflow-x: auto; font-family: 'Courier New', monospace; font-size: 12px; min-height: 200px;",
-              verbatimTextOutput("r_code", placeholder = TRUE)
-            )
-          ),
-          br(),
-          tags$div(
-            class = "well",
-            tags$h5("Instructions"),
-            tags$ol(
-              tags$li("Assurez-vous d'avoir installé le package BFS : ", tags$code("install.packages('BFS')")),
-              tags$li("Copiez le code ci-dessus"),
-              tags$li("Collez-le dans votre script R"),
-              tags$li("Exécutez le code pour charger les données")
-            )
-          )
-        )
-      )
-    )
-  )
-)
-
-# Logique serveur
-server <- function(input, output, session) {
+    return(var_name)
+  }
   
   # Variables réactives
   catalog_results <- reactiveVal(NULL)
@@ -350,7 +50,7 @@ server <- function(input, output, session) {
       
       tryCatch({
         # Recherche dans le catalogue BFS
-        results <- bfs_get_catalog_data(
+        results <- BFS::bfs_get_catalog_data(
           language = "fr",
           extended_search = input$search_term,
           spatial_division = if(input$spatial_division == "") NULL else input$spatial_division,
@@ -376,7 +76,7 @@ server <- function(input, output, session) {
       
       tryCatch({
         # Charger le codelist SSE
-        codelist <- bfs_get_sse_metadata(
+        codelist <- BFS::bfs_get_sse_metadata(
           number_bfs = input$sse_number_bfs,
           language = "fr"
         )
@@ -426,7 +126,7 @@ server <- function(input, output, session) {
     
     # Sélectionner les colonnes (utiliser any_of pour éviter les erreurs si colonnes manquantes)
     display_data <- results_df %>%
-      select(any_of(cols_to_show))
+      dplyr::select(dplyr::any_of(cols_to_show))
     
     # Renommer les colonnes pour un affichage plus lisible
     new_names <- colnames(display_data)
@@ -473,7 +173,7 @@ server <- function(input, output, session) {
     showNotification("Chargement des métadonnées...", type = "message")
     
     tryCatch({
-      metadata <- bfs_get_metadata(number_bfs = number_bfs, language = "fr")
+      metadata <- BFS::bfs_get_metadata(number_bfs = number_bfs, language = "fr")
       dataset_metadata(metadata)
       
       # Tidy metadata
@@ -527,7 +227,7 @@ server <- function(input, output, session) {
       # Créer un filtre pour chaque dimension
       filter_ui <- lapply(dimensions, function(dim_code) {
         dim_data <- codelist_df %>%
-          filter(code == dim_code)
+          dplyr::filter(code == dim_code)
         
         dim_name <- unique(dim_data$text)[1]
         dim_valueTexts <- unique(dim_data$valueText)
@@ -585,7 +285,7 @@ server <- function(input, output, session) {
       # Créer un filtre pour chaque dimension
       filter_ui <- lapply(dimensions, function(dim_code) {
         dim_data <- metadata_df %>%
-          filter(code == dim_code)
+          dplyr::filter(code == dim_code)
         
         dim_name <- unique(dim_data$text)[1]
         dim_values <- unique(dim_data$valueTexts)
@@ -640,7 +340,7 @@ server <- function(input, output, session) {
           if (!is.null(selected_valueTexts) && length(selected_valueTexts) > 0) {
             # Filtrer le codelist pour cette dimension
             dim_filter <- codelist_df %>%
-              filter(code == dim_code & valueText %in% selected_valueTexts)
+              dplyr::filter(code == dim_code & valueText %in% selected_valueTexts)
             filter_conditions[[dim_code]] <- dim_filter
           }
         }
@@ -651,7 +351,7 @@ server <- function(input, output, session) {
         }
         
         # Combiner tous les filtres
-        querydat <- bind_rows(filter_conditions)
+        querydat <- dplyr::bind_rows(filter_conditions)
         
         # Construire la requête avec tapply (comme dans la doc)
         query <- tapply(querydat$value, querydat$code, c)
@@ -663,7 +363,7 @@ server <- function(input, output, session) {
         end_period <- if(input$sse_end_period == "") NULL else input$sse_end_period
         
         # Interroger les données SSE
-        data_result <- bfs_get_sse_data(
+        data_result <- BFS::bfs_get_sse_data(
           number_bfs = number_bfs,
           language = "fr",
           query = query,
@@ -699,13 +399,13 @@ server <- function(input, output, session) {
         # Si aucun filtre n'est sélectionné, récupérer toutes les données
         if (length(query_list) == 0) {
           showNotification("Aucun filtre sélectionné. Récupération de toutes les données...", type = "message")
-          data_result <- bfs_get_data(
+          data_result <- BFS::bfs_get_data(
             number_bfs = dataset$number_bfs,
             language = "fr",
             delay = 2  # Délai pour éviter les erreurs "Too Many Requests"
           )
         } else {
-          data_result <- bfs_get_data(
+          data_result <- BFS::bfs_get_data(
             number_bfs = dataset$number_bfs,
             language = "fr",
             query = query_list,
@@ -833,7 +533,7 @@ server <- function(input, output, session) {
           
           if (!is.null(selected_valueTexts) && length(selected_valueTexts) > 0) {
             dim_data <- codelist_df %>%
-              filter(code == dim_code)
+              dplyr::filter(code == dim_code)
             dim_name <- unique(dim_data$text)[1]
             
             # Générer le code de filtre
@@ -944,15 +644,17 @@ server <- function(input, output, session) {
             
             # Générer le code pour cette dimension
             dim_data <- metadata_df %>%
-              filter(code == dim_code)
+              dplyr::filter(code == dim_code)
             dim_name <- unique(dim_data$text)[1]
             
             # Formater les valeurs sélectionnées
             values_str <- paste0('c("', paste(selected_values, collapse = '", "'), '")')
+            # Formater le nom de variable avec backticks si nécessaire
+            formatted_dim_code <- format_var_name(dim_code)
             query_code_lines <- c(
               query_code_lines,
               paste0("# ", dim_name, " (", dim_code, ")"),
-              paste0('query$', dim_code, ' <- ', values_str)
+              paste0('query$', formatted_dim_code, ' <- ', values_str)
             )
           }
         }
@@ -1048,15 +750,20 @@ server <- function(input, output, session) {
             valueTexts_str <- paste0('c("', paste(selected_valueTexts, collapse = '", "'), '")')
             filter_code_lines <- c(
               filter_code_lines,
-              paste0('querydat <- codelist %>% filter(code == "', dim_code, '" & valueText %in% ', valueTexts_str, ')')
+              paste0('querydat_', dim_code, ' <- codelist %>% filter(code == "', dim_code, '" & valueText %in% ', valueTexts_str, ')')
             )
           }
         }
         
         if (length(filter_code_lines) > 0) {
+          dim_vars <- unique(sapply(strsplit(filter_code_lines[grep("querydat_", filter_code_lines)], " <-"), function(x) x[1]))
+          bind_rows_code <- paste0("querydat <- bind_rows(", paste(dim_vars, collapse = ", "), ")")
+          
           code_lines <- c(
             code_lines,
             filter_code_lines,
+            "",
+            bind_rows_code,
             "",
             "query <- tapply(querydat$value, querydat$code, c)",
             ""
@@ -1101,9 +808,11 @@ server <- function(input, output, session) {
           
           if (!is.null(selected_values) && length(selected_values) > 0) {
             values_str <- paste0('c("', paste(selected_values, collapse = '", "'), '")')
+            # Formater le nom de variable avec backticks si nécessaire
+            formatted_dim_code <- format_var_name(dim_code)
             query_code_lines <- c(
               query_code_lines,
-              paste0('query$', dim_code, ' <- ', values_str)
+              paste0('query$', formatted_dim_code, ' <- ', values_str)
             )
           }
         }
@@ -1138,6 +847,3 @@ server <- function(input, output, session) {
     showNotification("Code copié dans le presse-papiers!", type = "message")
   })
 }
-
-# Lancer l'application
-shinyApp(ui = ui, server = server)
