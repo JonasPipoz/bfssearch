@@ -19,9 +19,10 @@ app_server <- function(input, output, session) {
   dataset_metadata <- reactiveVal(NULL)
   metadata_tidy <- reactiveVal(NULL)
   sse_codelist <- reactiveVal(NULL)  # Pour SSE
+  opendata_package <- reactiveVal(NULL)  # Pour Opendata.swiss
   query_dimensions <- reactiveVal(NULL)
   queried_data <- reactiveVal(NULL)
-  api_type <- reactiveVal("catalog")  # "catalog" ou "sse"
+  api_type <- reactiveVal("catalog")  # "catalog", "sse", ou "opendata"
   
   # Observer pour le type d'API
   observeEvent(input$api_type, {
@@ -32,6 +33,7 @@ app_server <- function(input, output, session) {
     dataset_metadata(NULL)
     metadata_tidy(NULL)
     sse_codelist(NULL)
+    opendata_package(NULL)
     queried_data(NULL)
   })
   
@@ -132,6 +134,60 @@ app_server <- function(input, output, session) {
       } else {
         showNotification("Veuillez entrer un terme de recherche ou un numéro BFS", type = "warning")
       }
+    } else if (input$api_type == "opendata") {
+      # Pour Opendata.swiss
+      if (is.null(input$opendata_search_term) || trimws(input$opendata_search_term) == "") {
+        showNotification("Veuillez entrer un terme de recherche", type = "warning")
+        return()
+      }
+      
+      showNotification("Recherche dans opendata.swiss...", type = "message")
+      
+      tryCatch({
+        # Utiliser la fonction de recherche Opendata.swiss
+        # La fonction est dans utils_opendata_search.R et devrait être chargée automatiquement
+        search_keyword <- trimws(input$opendata_search_term)
+        results <- search_opendata_swiss(keyword = search_keyword, language = "fr")
+        
+        if (is.null(results) || nrow(results) == 0) {
+          showNotification("Aucun résultat trouvé. Essayez un autre terme de recherche.", type = "warning")
+          catalog_results(NULL)
+        } else {
+          # Adapter les résultats au format attendu
+          # Utiliser any_of pour éviter les erreurs si certaines colonnes n'existent pas
+          results_formatted <- results |>
+            dplyr::mutate(
+              title = title,
+              number_bfs = id,  # Utiliser id comme number_bfs pour compatibilité
+              publication_date = Sys.Date(),
+              language_available = "fr"
+            ) |>
+            dplyr::select(dplyr::any_of(c("title", "number_bfs", "organization", "author", "publisher", "description", "num_resources", "id")))
+          
+          catalog_results(results_formatted)
+          showNotification(paste(nrow(results), "dataset(s) opendata.swiss trouvé(s)"), type = "message")
+        }
+      }, error = function(e) {
+        # Améliorer l'affichage de l'erreur
+        error_msg <- if (!is.null(e$message) && nchar(trimws(e$message)) > 0) {
+          trimws(e$message)
+        } else if (!is.null(e) && length(e) > 0) {
+          paste("Erreur:", toString(e))
+        } else {
+          "Erreur inconnue lors de la recherche"
+        }
+        
+        # Logger l'erreur complète pour le débogage
+        cat("Erreur opendata.swiss:", error_msg, "\n")
+        if (exists("print")) print(e)
+        
+        showNotification(
+          paste("Erreur lors de la recherche opendata.swiss:", error_msg), 
+          type = "error",
+          duration = 10
+        )
+        catalog_results(NULL)
+      })
     }
   })
   
@@ -147,7 +203,8 @@ app_server <- function(input, output, session) {
     
     # Colonnes préférées à afficher (dans l'ordre)
     # Pour SSE, on a aussi id, agencyID, version
-    preferred_cols <- c("title", "number_bfs", "id", "publication_date", "language_available", "language", "number_asset", "agencyID", "version")
+    # Pour Opendata.swiss, on a organization, author, publisher, description, num_resources
+    preferred_cols <- c("title", "number_bfs", "id", "organization", "author", "publisher", "description", "num_resources", "publication_date", "language_available", "language", "number_asset", "agencyID", "version")
     
     # Sélectionner les colonnes disponibles
     cols_to_show <- preferred_cols[preferred_cols %in% available_cols]
@@ -200,6 +257,9 @@ app_server <- function(input, output, session) {
       if (input$api_type == "sse") {
         # Pour SSE, charger directement le codelist
         load_sse_metadata(selected_row$number_bfs)
+      } else if (input$api_type == "opendata") {
+        # Pour Opendata.swiss, charger les détails du package
+        load_opendata_package(selected_row$number_bfs)  # number_bfs contient l'id
       } else {
         # Pour BFS Catalog, charger les métadonnées normales
         load_metadata(selected_row$number_bfs)
@@ -224,6 +284,23 @@ app_server <- function(input, output, session) {
     }, error = function(e) {
       showNotification(paste("Erreur lors du chargement des métadonnées SSE:", e$message), type = "error")
       sse_codelist(NULL)
+    })
+  }
+  
+  # Fonction pour charger les métadonnées Opendata.swiss
+  load_opendata_package <- function(package_id) {
+    showNotification("Chargement des détails du dataset opendata.swiss...", type = "message")
+    
+    tryCatch({
+      # Charger les détails du package
+      package_details <- get_opendata_swiss_package(package_id)
+      
+      opendata_package(package_details)
+      showNotification("Détails du dataset chargés avec succès", type = "message")
+      
+    }, error = function(e) {
+      showNotification(paste("Erreur lors du chargement:", e$message), type = "error")
+      opendata_package(NULL)
     })
   }
   
@@ -255,22 +332,280 @@ app_server <- function(input, output, session) {
     
     dataset <- selected_dataset()
     
-    tagList(
-      h4("Dataset sélectionné"),
-      tags$div(
-        class = "well",
-        tags$p(tags$strong("Titre:"), dataset$title),
-        tags$p(tags$strong("Numéro BFS:"), dataset$number_bfs),
-        tags$p(tags$strong("Date de publication:"), as.character(dataset$publication_date)),
-        tags$p(tags$strong("Langues disponibles:"), dataset$language_available)
+    if (input$api_type == "opendata" && !is.null(opendata_package())) {
+      # Pour Opendata.swiss, afficher plus d'informations
+      package <- opendata_package()
+      
+      # Extraire la description
+      description <- ""
+      if ("description" %in% names(package) && is.list(package$description)) {
+        description <- package$description$fr %||% package$description$en %||% ""
+      } else if ("description" %in% names(package)) {
+        description <- as.character(package$description)
+      }
+      
+      # Extraire l'organisation
+      org_name <- ""
+      if ("organization" %in% names(package) && is.list(package$organization)) {
+        org_name <- package$organization$title %||% package$organization$name %||% ""
+      }
+      
+      tagList(
+        h4("Dataset sélectionné"),
+        tags$div(
+          class = "well",
+          tags$p(tags$strong("Titre:"), dataset$title),
+          tags$p(tags$strong("ID:"), dataset$number_bfs),
+          if (org_name != "") tags$p(tags$strong("Organisation:"), org_name),
+          if (description != "") tags$p(tags$strong("Description:"), tags$br(), description),
+          tags$p(tags$strong("Nombre de ressources:"), package$num_resources %||% length(package$resources %||% list()))
+        )
       )
-    )
+    } else {
+      # Pour BFS Catalog et SSE
+      tagList(
+        h4("Dataset sélectionné"),
+        tags$div(
+          class = "well",
+          tags$p(tags$strong("Titre:"), dataset$title),
+          tags$p(tags$strong("Numéro BFS:"), dataset$number_bfs),
+          tags$p(tags$strong("Date de publication:"), as.character(dataset$publication_date)),
+          tags$p(tags$strong("Langues disponibles:"), dataset$language_available)
+        )
+      )
+    }
   })
   
   # Génération dynamique des filtres
   output$dynamic_filters <- renderUI({
     # Vérifier le type d'API
-    if (input$api_type == "sse") {
+    if (input$api_type == "opendata") {
+      # Pour Opendata.swiss, afficher les ressources disponibles
+      req(opendata_package())
+      
+      package <- opendata_package()
+      resources <- package$resources %||% list()
+      
+      if (length(resources) == 0) {
+        return(tags$p("Aucune ressource disponible pour ce dataset."))
+      }
+      
+      # Créer une liste des ressources avec leurs informations
+      resources_ui <- lapply(seq_along(resources), function(i) {
+        res <- resources[[i]]
+        
+        # Extraire les informations de la ressource
+        res_name <- ""
+        if ("name" %in% names(res) && is.list(res$name)) {
+          res_name <- res$name$fr %||% res$name$en %||% ""
+        } else if ("name" %in% names(res)) {
+          res_name <- as.character(res$name)
+        }
+        
+        res_title <- ""
+        if ("title" %in% names(res) && is.list(res$title)) {
+          res_title <- res$title$fr %||% res$title$en %||% ""
+        } else if ("title" %in% names(res)) {
+          res_title <- as.character(res$title)
+        }
+        
+        res_description <- ""
+        if ("description" %in% names(res) && is.list(res$description)) {
+          res_description <- res$description$fr %||% res$description$en %||% ""
+        } else if ("description" %in% names(res)) {
+          res_description <- as.character(res$description)
+        }
+        
+        res_format <- res$format %||% "N/A"
+        download_url <- res$download_url %||% res$url %||% ""
+        
+        tags$div(
+          class = "well",
+          style = "margin-bottom: 15px;",
+          tags$h5(if (res_title != "") res_title else if (res_name != "") res_name else paste("Ressource", i)),
+          if (res_description != "") tags$p(tags$em(res_description)),
+          tags$p(tags$strong("Format:"), res_format),
+          if (download_url != "") {
+            tags$p(
+              tags$a(
+                href = download_url,
+                target = "_blank",
+                class = "btn btn-primary btn-sm",
+                "Télécharger",
+                tags$span(icon("external-link-alt"), style = "margin-left: 5px;")
+              )
+            )
+          }
+        )
+      })
+      
+      # Fonction pour formater une valeur de métadonnée
+      format_metadata_value <- function(value, field_name) {
+        # Vérifier si value est NULL
+        if (is.null(value)) {
+          return(NULL)
+        }
+        
+        # Pour les caractères, vérifier si c'est vide (en gérant les vecteurs)
+        if (is.character(value)) {
+          # Si c'est un vecteur, vérifier si tous les éléments sont vides
+          if (length(value) > 1) {
+            # Si c'est un vecteur avec plusieurs éléments, les joindre
+            non_empty <- trimws(value) != ""
+            if (any(non_empty)) {
+              return(paste(value[non_empty], collapse = ", "))
+            } else {
+              return(NULL)
+            }
+          } else {
+            # Un seul élément
+            if (length(value) == 0 || trimws(value[1]) == "") {
+              return(NULL)
+            }
+            return(value[1])
+          }
+        }
+        
+        if (is.list(value)) {
+          # Si c'est une liste multilingue, afficher toutes les langues
+          if (length(value) > 0) {
+            lang_values <- lapply(names(value), function(lang) {
+              val <- value[[lang]]
+              if (!is.null(val)) {
+                val_char <- as.character(val)
+                # Vérifier que val_char n'est pas un vecteur vide
+                if (length(val_char) > 0) {
+                  non_empty <- trimws(val_char) != ""
+                  if (any(non_empty)) {
+                    val_clean <- paste(val_char[non_empty], collapse = ", ")
+                    if (nchar(val_clean) > 0) {
+                      return(tags$span(tags$strong(lang, ":"), val_clean, tags$br()))
+                    }
+                  }
+                }
+              }
+              return(NULL)
+            })
+            # Filtrer les NULL
+            lang_values <- lang_values[!sapply(lang_values, is.null)]
+            if (length(lang_values) > 0) {
+              return(tagList(lang_values))
+            }
+          }
+          return(NULL)
+        } else if (is.numeric(value) || is.logical(value)) {
+          if (length(value) == 1) {
+            return(as.character(value))
+          } else {
+            return(paste(value, collapse = ", "))
+          }
+        } else {
+          return(toString(value))
+        }
+      }
+      
+      # Liste des métadonnées importantes à afficher
+      metadata_fields <- list(
+        "Identifiant" = "id",
+        "Identifiant alternatif" = "identifier",
+        "Titre" = "title",
+        "Nom d'affichage" = "display_name",
+        "Auteur" = "author",
+        "Email auteur" = "author_email",
+        "Éditeur" = "publisher",
+        "Organisation" = "organization",
+        "Mainteneur" = "maintainer",
+        "Email mainteneur" = "maintainer_email",
+        "Date de publication" = "issued",
+        "Date de modification" = "modified",
+        "Date de création (métadonnées)" = "metadata_created",
+        "Date de modification (métadonnées)" = "metadata_modified",
+        "Langue" = "language",
+        "Licence" = "license_title",
+        "ID Licence" = "license_id",
+        "Couverture spatiale" = "spatial",
+        "Couverture temporelle" = "temporals",
+        "Fréquence de mise à jour" = "accrual_periodicity",
+        "Mots-clés" = "keywords",
+        "Tags" = "tags",
+        "URL" = "url",
+        "Version" = "version",
+        "Type" = "type",
+        "État" = "state",
+        "Privé" = "private",
+        "Ouvert" = "isopen",
+        "Nombre de ressources" = "num_resources",
+        "Nombre de tags" = "num_tags"
+      )
+      
+      # Créer l'affichage des métadonnées
+      metadata_ui <- lapply(names(metadata_fields), function(field_label) {
+        field_name <- metadata_fields[[field_label]]
+        if (field_name %in% names(package)) {
+          value <- package[[field_name]]
+          formatted_value <- format_metadata_value(value, field_name)
+          
+          if (!is.null(formatted_value)) {
+            # Gestion spéciale pour certains champs
+            if (field_name == "organization" && is.list(value)) {
+              org_display <- ""
+              if ("title" %in% names(value)) {
+                if (is.list(value$title)) {
+                  org_display <- value$title$fr %||% value$title$en %||% value$title[[1]] %||% ""
+                } else {
+                  org_display <- as.character(value$title)
+                }
+              } else if ("name" %in% names(value)) {
+                org_display <- as.character(value$name)
+              }
+              if (org_display != "") {
+                return(tags$p(tags$strong(field_label, ":"), org_display))
+              }
+            } else if (field_name == "keywords" && is.list(value)) {
+              # Keywords peut être une liste de listes
+              keywords_list <- unlist(value, recursive = TRUE)
+              if (length(keywords_list) > 0) {
+                keywords_str <- paste(unique(keywords_list), collapse = ", ")
+                return(tags$p(tags$strong(field_label, ":"), keywords_str))
+              }
+            } else if (field_name == "tags" && is.list(value)) {
+              # Tags est une liste d'objets avec 'name'
+              tag_names <- sapply(value, function(tag) tag$name %||% "")
+              if (length(tag_names) > 0) {
+                tags_str <- paste(tag_names[tag_names != ""], collapse = ", ")
+                return(tags$p(tags$strong(field_label, ":"), tags_str))
+              }
+            } else {
+              return(tags$p(tags$strong(field_label, ":"), formatted_value))
+            }
+          }
+        }
+        return(NULL)
+      })
+      
+      # Filtrer les NULL
+      metadata_ui <- metadata_ui[!sapply(metadata_ui, is.null)]
+      
+      tagList(
+        h4("Métadonnées du dataset"),
+        tags$div(
+          class = "well",
+          style = "max-height: 400px; overflow-y: auto;",
+          metadata_ui
+        ),
+        br(),
+        h4("Ressources disponibles"),
+        tags$div(
+          class = "alert alert-info",
+          tags$p(
+            tags$strong("Note:"),
+            " Les ressources opendata.swiss sont des fichiers à télécharger. ",
+            "Cliquez sur 'Télécharger' pour accéder au fichier."
+          )
+        ),
+        resources_ui
+      )
+    } else if (input$api_type == "sse") {
       # Pour SSE, utiliser le codelist
       req(sse_codelist())
       

@@ -26,7 +26,8 @@ app_ui <- function(request) {
             label = NULL,
             choices = list(
               "BFS Catalog (PXWeb)" = "catalog",
-              "Swiss Stats Explorer" = "sse"
+              "Swiss Stats Explorer" = "sse",
+              "Opendata.swiss" = "opendata"
             ),
             selected = "catalog"
           ),
@@ -71,6 +72,17 @@ app_ui <- function(request) {
           ),
           tags$small("Entrez le numéro BFS du dataset SSE (ex: DF_LWZ_1)")
         )
+      ),
+      
+      # Champ pour Opendata.swiss
+      conditionalPanel(
+        condition = "input.api_type == 'opendata'",
+        textInput(
+          "opendata_search_term",
+          label = "Rechercher un dataset",
+          placeholder = "Ex: statistique, géographie, économie..."
+        ),
+        tags$small("Recherche dans le catalogue opendata.swiss (multilingue)")
       ),
         
         # Bouton de recherche
@@ -147,7 +159,10 @@ app_ui <- function(request) {
             br(),
             uiOutput("dynamic_filters"),
             br(),
-            actionButton("query_btn", "Interroger les données", class = "btn-success", width = "100%"),
+            conditionalPanel(
+              condition = "input.api_type != 'opendata'",
+              actionButton("query_btn", "Interroger les données", class = "btn-success", width = "100%")
+            ),
             br(), br(),
             verbatimTextOutput("query_status")
           ),
