@@ -125,7 +125,7 @@ app_server <- function(input, output, session) {
     }
     
     # Sélectionner les colonnes (utiliser any_of pour éviter les erreurs si colonnes manquantes)
-    display_data <- results_df %>%
+    display_data <- results_df |> 
       dplyr::select(dplyr::any_of(cols_to_show))
     
     # Renommer les colonnes pour un affichage plus lisible
@@ -177,7 +177,7 @@ app_server <- function(input, output, session) {
       dataset_metadata(metadata)
       
       # Tidy metadata
-      metadata_tidy_df <- metadata %>%
+      metadata_tidy_df <- metadata |> 
         tidyr::unnest_longer(c(values, valueTexts))
       
       metadata_tidy(metadata_tidy_df)
@@ -226,7 +226,7 @@ app_server <- function(input, output, session) {
       
       # Créer un filtre pour chaque dimension
       filter_ui <- lapply(dimensions, function(dim_code) {
-        dim_data <- codelist_df %>%
+        dim_data <- codelist_df |> 
           dplyr::filter(code == dim_code)
         
         dim_name <- unique(dim_data$text)[1]
@@ -284,7 +284,7 @@ app_server <- function(input, output, session) {
       
       # Créer un filtre pour chaque dimension
       filter_ui <- lapply(dimensions, function(dim_code) {
-        dim_data <- metadata_df %>%
+        dim_data <- metadata_df |> 
           dplyr::filter(code == dim_code)
         
         dim_name <- unique(dim_data$text)[1]
@@ -339,7 +339,7 @@ app_server <- function(input, output, session) {
           
           if (!is.null(selected_valueTexts) && length(selected_valueTexts) > 0) {
             # Filtrer le codelist pour cette dimension
-            dim_filter <- codelist_df %>%
+            dim_filter <- codelist_df |> 
               dplyr::filter(code == dim_code & valueText %in% selected_valueTexts)
             filter_conditions[[dim_code]] <- dim_filter
           }
@@ -532,7 +532,7 @@ app_server <- function(input, output, session) {
           selected_valueTexts <- input[[input_id]]
           
           if (!is.null(selected_valueTexts) && length(selected_valueTexts) > 0) {
-            dim_data <- codelist_df %>%
+            dim_data <- codelist_df |> 
               dplyr::filter(code == dim_code)
             dim_name <- unique(dim_data$text)[1]
             
@@ -541,7 +541,7 @@ app_server <- function(input, output, session) {
             filter_code_lines <- c(
               filter_code_lines,
               paste0("# Filtrer pour ", dim_name, " (", dim_code, ")"),
-              paste0('querydat_', dim_code, ' <- codelist %>% '),
+              paste0('querydat_', dim_code, ' <- codelist |>  '),
               paste0('  filter(code == "', dim_code, '" & valueText %in% ', valueTexts_str, ')')
             )
           }
@@ -571,7 +571,7 @@ app_server <- function(input, output, session) {
             code_lines,
             "# Construire la requête (sélectionner toutes les valeurs)",
             "# Note: Vous devez filtrer le codelist selon vos besoins",
-            "# Exemple: querydat <- codelist %>% filter(code == 'GR_KT_GDE' & valueText %in% c('Aarau', 'Olten'))",
+            "# Exemple: querydat <- codelist |>  filter(code == 'GR_KT_GDE' & valueText %in% c('Aarau', 'Olten'))",
             "querydat <- codelist",
             "query <- tapply(querydat$value, querydat$code, c)",
             "",
@@ -643,7 +643,7 @@ app_server <- function(input, output, session) {
             query_list[[dim_code]] <- selected_values
             
             # Générer le code pour cette dimension
-            dim_data <- metadata_df %>%
+            dim_data <- metadata_df |> 
               dplyr::filter(code == dim_code)
             dim_name <- unique(dim_data$text)[1]
             
@@ -750,7 +750,7 @@ app_server <- function(input, output, session) {
             valueTexts_str <- paste0('c("', paste(selected_valueTexts, collapse = '", "'), '")')
             filter_code_lines <- c(
               filter_code_lines,
-              paste0('querydat_', dim_code, ' <- codelist %>% filter(code == "', dim_code, '" & valueText %in% ', valueTexts_str, ')')
+              paste0('querydat_', dim_code, ' <- codelist |>  filter(code == "', dim_code, '" & valueText %in% ', valueTexts_str, ')')
             )
           }
         }
