@@ -219,7 +219,8 @@ app_server <- function(input, output, session) {
     results_df <- catalog_results()
     
     # Colonnes principales à afficher
-    main_cols <- c("source", "title", "description")
+    main_cols <- c("source", "title", "description", "publication_date")
+    # Ne garder que les colonnes qui existent dans les données
     main_cols <- main_cols[main_cols %in% colnames(results_df)]
     
     # Toutes les autres colonnes pour le tooltip (exclure id et les colonnes principales)
