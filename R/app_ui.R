@@ -18,11 +18,12 @@ app_ui <- function(request) {
         width = 3,
         h4("Recherche de données"),
         
-        # Sélecteur de type d'API
+        # Sélecteur de catalogues (checkboxes pour activer/désactiver)
         tags$div(
-          tags$label("Type d'API", class = "control-label"),
-          radioButtons(
-            "api_type",
+          tags$label("Catalogues de recherche", class = "control-label"),
+          tags$p("Activez les catalogues dans lesquels vous souhaitez rechercher:", style = "font-size: 0.9em; color: #666; margin-bottom: 10px;"),
+          checkboxGroupInput(
+            "active_catalogs",
             label = NULL,
             choices = list(
               "BFS Catalog (PXWeb)" = "catalog",
@@ -42,48 +43,25 @@ app_ui <- function(request) {
         
         hr(),
         
-        # Champ de recherche (pour BFS Catalog)
-        conditionalPanel(
-          condition = "input.api_type == 'catalog'",
-          textInput(
-            "search_term",
-            label = "Terme de recherche",
-            placeholder = "Ex: étudiants, population, logement..."
-          )
+        # Champ de recherche unifié
+        textInput(
+          "search_term",
+          label = "Terme de recherche",
+          placeholder = "Ex: étudiants, population, logement..."
         ),
+        tags$small("La recherche sera effectuée dans tous les catalogues activés ci-dessus."),
         
-      # Champ pour SSE (recherche ou numéro direct)
-      conditionalPanel(
-        condition = "input.api_type == 'sse'",
+        # Champ pour numéro BFS direct (SSE uniquement)
         tags$div(
-          h5("Recherche dans le catalogue SSE"),
-          textInput(
-            "sse_search_term",
-            label = "Rechercher un dataset",
-            placeholder = "Ex: logement, population, étudiants..."
-          ),
-          tags$small("Ou entrez directement le numéro BFS ci-dessous"),
-          hr(),
-          h5("Ou numéro BFS direct"),
+          style = "margin-top: 15px;",
+          h5("Ou numéro BFS direct (SSE uniquement)"),
           textInput(
             "sse_number_bfs",
             label = "Numéro BFS (SSE)",
             placeholder = "Ex: DF_LWZ_1"
           ),
-          tags$small("Entrez le numéro BFS du dataset SSE (ex: DF_LWZ_1)")
-        )
-      ),
-      
-      # Champ pour Opendata.swiss
-      conditionalPanel(
-        condition = "input.api_type == 'opendata'",
-        textInput(
-          "opendata_search_term",
-          label = "Rechercher un dataset",
-          placeholder = "Ex: statistique, géographie, économie..."
+          tags$small("Entrez le numéro BFS du dataset SSE pour charger directement ses métadonnées (ex: DF_LWZ_1)")
         ),
-        tags$small("Recherche dans le catalogue opendata.swiss (multilingue)")
-      ),
         
         # Bouton de recherche
         actionButton("search_btn", "Rechercher", class = "btn-primary", width = "100%"),
@@ -159,10 +137,7 @@ app_ui <- function(request) {
             br(),
             uiOutput("dynamic_filters"),
             br(),
-            conditionalPanel(
-              condition = "input.api_type != 'opendata'",
-              actionButton("query_btn", "Interroger les données", class = "btn-success", width = "100%")
-            ),
+            uiOutput("query_button_ui"),
             br(), br(),
             verbatimTextOutput("query_status")
           ),

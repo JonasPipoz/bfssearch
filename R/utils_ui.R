@@ -105,5 +105,12 @@ get_modal_css <- function() {
       border-radius: 3px;
       font-size: 0.9em;
     }
+    /* Styles pour les tooltips du tableau */
+    #catalog_table tbody tr[title] {
+      cursor: help;
+    }
+    #catalog_table tbody tr[title]:hover {
+      background-color: #f0f8ff;
+    }
   ")
 }
