@@ -341,24 +341,56 @@ app_server <- function(input, output, session) {
       if ("description" %in% names(package) && is.list(package$description)) {
         description <- package$description$fr %||% package$description$en %||% ""
       } else if ("description" %in% names(package)) {
-        description <- as.character(package$description)
+        desc_val <- package$description
+        if (length(desc_val) > 1) {
+          description <- paste(desc_val, collapse = ", ")
+        } else {
+          description <- as.character(desc_val)
+        }
       }
       
       # Extraire l'organisation
       org_name <- ""
       if ("organization" %in% names(package) && is.list(package$organization)) {
-        org_name <- package$organization$title %||% package$organization$name %||% ""
+        if ("title" %in% names(package$organization) && is.list(package$organization$title)) {
+          org_name <- package$organization$title$fr %||% package$organization$title$en %||% package$organization$title$de %||% ""
+        } else if ("name" %in% names(package$organization)) {
+          org_name <- package$organization$name
+        }
       }
+      
+      # Construire la liste des éléments à afficher dans le div
+      div_elements <- list(
+        tags$p(tags$strong("Titre:"), dataset$title),
+        tags$p(tags$strong("ID:"), dataset$number_bfs)
+      )
+      
+      # Ajouter l'organisation si elle existe et n'est pas vide
+      if (length(org_name) > 0 && !is.null(org_name)) {
+        org_str <- if (length(org_name) > 1) paste(org_name, collapse = ", ") else as.character(org_name)
+        if (nchar(trimws(org_str)) > 0) {
+          div_elements[[length(div_elements) + 1]] <- tags$p(tags$strong("Organisation:"), org_str)
+        }
+      }
+      
+      # Ajouter la description si elle existe et n'est pas vide
+      if (length(description) > 0 && !is.null(description)) {
+        desc_str <- if (length(description) > 1) paste(description, collapse = ", ") else as.character(description)
+        if (nchar(trimws(desc_str)) > 0) {
+          div_elements[[length(div_elements) + 1]] <- tags$p(tags$strong("Description:"), tags$br(), desc_str)
+        }
+      }
+      
+      # Ajouter le nombre de ressources
+      num_res <- package$num_resources %||% length(package$resources %||% list())
+      if (length(num_res) > 1) num_res <- length(num_res)
+      div_elements[[length(div_elements) + 1]] <- tags$p(tags$strong("Nombre de ressources:"), as.character(num_res))
       
       tagList(
         h4("Dataset sélectionné"),
         tags$div(
           class = "well",
-          tags$p(tags$strong("Titre:"), dataset$title),
-          tags$p(tags$strong("ID:"), dataset$number_bfs),
-          if (org_name != "") tags$p(tags$strong("Organisation:"), org_name),
-          if (description != "") tags$p(tags$strong("Description:"), tags$br(), description),
-          tags$p(tags$strong("Nombre de ressources:"), package$num_resources %||% length(package$resources %||% list()))
+          div_elements
         )
       )
     } else {
