@@ -13,6 +13,30 @@ app_server <- function(input, output, session) {
     return(var_name)
   }
   
+  # Fonction helper pour obtenir le type de source du dataset sélectionné
+  get_dataset_source <- function(dataset = NULL) {
+    if (is.null(dataset)) {
+      dataset <- selected_dataset()
+    }
+    if (is.null(dataset)) {
+      return(NULL)
+    }
+    
+    # Vérifier la colonne "source" en premier
+    if ("source" %in% names(dataset)) {
+      return(dataset$source)
+    }
+    
+    # Fallback: déterminer à partir des colonnes disponibles
+    if ("agencyID" %in% names(dataset) || "version" %in% names(dataset)) {
+      return("Swiss Stats Explorer")
+    } else if ("organization" %in% names(dataset) || "author" %in% names(dataset)) {
+      return("Opendata.swiss")
+    } else {
+      return("BFS Catalog")
+    }
+  }
+  
   # Variables réactives
   catalog_results <- reactiveVal(NULL)
   selected_dataset <- reactiveVal(NULL)
@@ -22,19 +46,19 @@ app_server <- function(input, output, session) {
   opendata_package <- reactiveVal(NULL)  # Pour Opendata.swiss
   query_dimensions <- reactiveVal(NULL)
   queried_data <- reactiveVal(NULL)
-  api_type <- reactiveVal("catalog")  # "catalog", "sse", ou "opendata"
   
-  # Observer pour le type d'API
-  observeEvent(input$api_type, {
-    api_type(input$api_type)
-    # Réinitialiser les résultats lors du changement de type
-    catalog_results(NULL)
-    selected_dataset(NULL)
-    dataset_metadata(NULL)
-    metadata_tidy(NULL)
-    sse_codelist(NULL)
-    opendata_package(NULL)
-    queried_data(NULL)
+  # Observer pour réinitialiser les résultats lors du changement de catalogues actifs
+  observeEvent(input$active_catalogs, {
+    # Réinitialiser les résultats si aucun catalogue n'est activé
+    if (length(input$active_catalogs) == 0) {
+      catalog_results(NULL)
+      selected_dataset(NULL)
+      dataset_metadata(NULL)
+      metadata_tidy(NULL)
+      sse_codelist(NULL)
+      opendata_package(NULL)
+      queried_data(NULL)
+    }
   })
   
   # Observer pour ouvrir le modal d'information SSE
@@ -43,153 +67,149 @@ app_server <- function(input, output, session) {
     session$sendCustomMessage("showSSEModal", list())
   })
   
-  # Recherche dans le catalogue (BFS Catalog)
+  # Recherche dans les catalogues activés
   observeEvent(input$search_btn, {
-    if (input$api_type == "catalog") {
-      req(input$search_term)
-      
-      showNotification("Recherche en cours...", type = "message")
-      
+    # Vérifier qu'au moins un catalogue est activé
+    if (is.null(input$active_catalogs) || length(input$active_catalogs) == 0) {
+      showNotification("Veuillez activer au moins un catalogue", type = "warning")
+      return()
+    }
+    
+    # Vérifier qu'un terme de recherche est fourni
+    if (is.null(input$search_term) || trimws(input$search_term) == "") {
+      showNotification("Veuillez entrer un terme de recherche", type = "warning")
+      return()
+    }
+    
+    search_keyword <- trimws(input$search_term)
+    all_results <- list()
+    
+    showNotification("Recherche en cours dans les catalogues activés...", type = "message")
+    
+    # Recherche dans BFS Catalog
+    if ("catalog" %in% input$active_catalogs) {
       tryCatch({
-        # Recherche dans le catalogue BFS
+        showNotification("Recherche dans BFS Catalog...", type = "message")
         results <- BFS::bfs_get_catalog_data(
           language = "fr",
-          extended_search = input$search_term,
+          extended_search = search_keyword,
           spatial_division = if(input$spatial_division == "") NULL else input$spatial_division,
           limit = input$limit
         )
         
-        if (nrow(results) == 0) {
-          showNotification("Aucun résultat trouvé. Essayez un autre terme de recherche.", type = "warning")
-          catalog_results(NULL)
-        } else {
-          catalog_results(results)
-          showNotification(paste(nrow(results), "dataset(s) trouvé(s)"), type = "message")
+        if (nrow(results) > 0) {
+          results$source <- "BFS Catalog"
+          all_results[["catalog"]] <- results
         }
       }, error = function(e) {
-        showNotification(paste("Erreur lors de la recherche:", e$message), type = "error")
-        catalog_results(NULL)
+        showNotification(paste("Erreur BFS Catalog:", e$message), type = "error")
       })
-    } else if (input$api_type == "sse") {
-      # Pour SSE, vérifier si recherche ou numéro direct
-      if (!is.null(input$sse_search_term) && input$sse_search_term != "") {
-        # Recherche dans le catalogue SSE
-        showNotification("Recherche dans le catalogue SSE...", type = "message")
-        
-        tryCatch({
-          # Utiliser la fonction de recherche SSE
-          results <- search_swiss_stats(keyword = input$sse_search_term, language = "fr")
-          
-          if (nrow(results) == 0) {
-            showNotification("Aucun résultat trouvé. Essayez un autre terme de recherche.", type = "warning")
-            catalog_results(NULL)
-          } else {
-            # Adapter les résultats au format attendu
-            results_formatted <- results |>
-              dplyr::mutate(
-                title = name,
-                number_bfs = id,
-                publication_date = Sys.Date(),
-                language_available = "fr"
-              ) |>
-              dplyr::select(title, number_bfs, publication_date, language_available, id, agencyID, version)
-            
-            catalog_results(results_formatted)
-            showNotification(paste(nrow(results), "dataset(s) SSE trouvé(s)"), type = "message")
-          }
-        }, error = function(e) {
-          showNotification(paste("Erreur lors de la recherche SSE:", e$message), type = "error")
-          catalog_results(NULL)
-        })
-      } else if (!is.null(input$sse_number_bfs) && input$sse_number_bfs != "") {
-        # Charger directement les métadonnées avec le numéro BFS
-        showNotification("Chargement des métadonnées SSE...", type = "message")
-        
-        tryCatch({
-          # Charger le codelist SSE
-          codelist <- BFS::bfs_get_sse_metadata(
-            number_bfs = input$sse_number_bfs,
-            language = "fr"
-          )
-          
-          sse_codelist(codelist)
-          
-          # Créer un dataset factice pour la compatibilité
-          fake_dataset <- data.frame(
-            title = paste0("Dataset SSE: ", input$sse_number_bfs),
-            number_bfs = input$sse_number_bfs,
-            publication_date = Sys.Date(),
-            language_available = "fr"
-          )
-          selected_dataset(fake_dataset)
-          
-          # Passer directement à l'onglet de configuration
-          updateTabsetPanel(session, "main_tabs", selected = "Configuration des filtres")
-          
-          showNotification("Métadonnées SSE chargées avec succès", type = "message")
-        }, error = function(e) {
-          showNotification(paste("Erreur lors du chargement SSE:", e$message), type = "error")
-          sse_codelist(NULL)
-        })
-      } else {
-        showNotification("Veuillez entrer un terme de recherche ou un numéro BFS", type = "warning")
-      }
-    } else if (input$api_type == "opendata") {
-      # Pour Opendata.swiss
-      if (is.null(input$opendata_search_term) || trimws(input$opendata_search_term) == "") {
-        showNotification("Veuillez entrer un terme de recherche", type = "warning")
-        return()
-      }
-      
-      showNotification("Recherche dans opendata.swiss...", type = "message")
-      
+    }
+    
+    # Recherche dans Swiss Stats Explorer
+    if ("sse" %in% input$active_catalogs) {
       tryCatch({
-        # Utiliser la fonction de recherche Opendata.swiss
-        # La fonction est dans utils_opendata_search.R et devrait être chargée automatiquement
-        search_keyword <- trimws(input$opendata_search_term)
+        showNotification("Recherche dans Swiss Stats Explorer...", type = "message")
+        results <- search_swiss_stats(keyword = search_keyword, language = "fr")
+        
+        if (nrow(results) > 0) {
+          results_formatted <- results |>
+            dplyr::mutate(
+              title = name,
+              number_bfs = id,
+              publication_date = Sys.Date(),
+              language_available = "fr",
+              source = "Swiss Stats Explorer"
+            ) |>
+            dplyr::select(dplyr::any_of(c("title", "number_bfs", "publication_date", "language_available", "id", "agencyID", "version", "source")))
+          
+          all_results[["sse"]] <- results_formatted
+        }
+      }, error = function(e) {
+        showNotification(paste("Erreur Swiss Stats Explorer:", e$message), type = "error")
+      })
+    }
+    
+    # Recherche dans Opendata.swiss
+    if ("opendata" %in% input$active_catalogs) {
+      tryCatch({
+        showNotification("Recherche dans Opendata.swiss...", type = "message")
         results <- search_opendata_swiss(keyword = search_keyword, language = "fr")
         
-        if (is.null(results) || nrow(results) == 0) {
-          showNotification("Aucun résultat trouvé. Essayez un autre terme de recherche.", type = "warning")
-          catalog_results(NULL)
-        } else {
-          # Adapter les résultats au format attendu
-          # Utiliser any_of pour éviter les erreurs si certaines colonnes n'existent pas
+        if (!is.null(results) && nrow(results) > 0) {
           results_formatted <- results |>
             dplyr::mutate(
               title = title,
-              number_bfs = id,  # Utiliser id comme number_bfs pour compatibilité
+              number_bfs = id,
               publication_date = Sys.Date(),
-              language_available = "fr"
+              language_available = "fr",
+              source = "Opendata.swiss"
             ) |>
-            dplyr::select(dplyr::any_of(c("title", "number_bfs", "organization", "author", "publisher", "description", "num_resources", "id")))
+            dplyr::select(dplyr::any_of(c("title", "number_bfs", "organization", "author", "publisher", "description", "num_resources", "id", "source")))
           
-          catalog_results(results_formatted)
-          showNotification(paste(nrow(results), "dataset(s) opendata.swiss trouvé(s)"), type = "message")
+          all_results[["opendata"]] <- results_formatted
         }
       }, error = function(e) {
-        # Améliorer l'affichage de l'erreur
         error_msg <- if (!is.null(e$message) && nchar(trimws(e$message)) > 0) {
           trimws(e$message)
-        } else if (!is.null(e) && length(e) > 0) {
-          paste("Erreur:", toString(e))
         } else {
-          "Erreur inconnue lors de la recherche"
+          "Erreur inconnue"
         }
-        
-        # Logger l'erreur complète pour le débogage
-        cat("Erreur opendata.swiss:", error_msg, "\n")
-        if (exists("print")) print(e)
-        
-        showNotification(
-          paste("Erreur lors de la recherche opendata.swiss:", error_msg), 
-          type = "error",
-          duration = 10
-        )
-        catalog_results(NULL)
+        showNotification(paste("Erreur Opendata.swiss:", error_msg), type = "error")
       })
     }
+    
+    # Combiner tous les résultats
+    if (length(all_results) > 0) {
+      # Combiner les dataframes en gérant les colonnes différentes
+      combined_results <- dplyr::bind_rows(all_results)
+      catalog_results(combined_results)
+      
+      total_count <- nrow(combined_results)
+      sources_summary <- table(combined_results$source)
+      summary_msg <- paste0(total_count, " dataset(s) trouvé(s) (", 
+                            paste(paste(sources_summary, names(sources_summary), sep = " "), collapse = ", "), ")")
+      showNotification(summary_msg, type = "message", duration = 5)
+    } else {
+      showNotification("Aucun résultat trouvé dans les catalogues activés. Essayez un autre terme de recherche.", type = "warning")
+      catalog_results(NULL)
+    }
   })
+  
+  # Observer pour le numéro BFS direct (SSE uniquement)
+  observeEvent(input$sse_number_bfs, {
+    if (!is.null(input$sse_number_bfs) && trimws(input$sse_number_bfs) != "") {
+      showNotification("Chargement des métadonnées SSE...", type = "message")
+      
+      tryCatch({
+        # Charger le codelist SSE
+        codelist <- BFS::bfs_get_sse_metadata(
+          number_bfs = trimws(input$sse_number_bfs),
+          language = "fr"
+        )
+        
+        sse_codelist(codelist)
+        
+        # Créer un dataset factice pour la compatibilité
+        fake_dataset <- data.frame(
+          title = paste0("Dataset SSE: ", trimws(input$sse_number_bfs)),
+          number_bfs = trimws(input$sse_number_bfs),
+          publication_date = Sys.Date(),
+          language_available = "fr",
+          source = "Swiss Stats Explorer"
+        )
+        selected_dataset(fake_dataset)
+        
+        # Passer directement à l'onglet de configuration
+        updateTabsetPanel(session, "main_tabs", selected = "Configuration des filtres")
+        
+        showNotification("Métadonnées SSE chargées avec succès", type = "message")
+      }, error = function(e) {
+        showNotification(paste("Erreur lors du chargement SSE:", e$message), type = "error")
+        sse_codelist(NULL)
+      })
+    }
+  }, ignoreInit = TRUE)
   
   # Affichage du tableau de résultats
   output$catalog_table <- DT::renderDataTable({
@@ -198,25 +218,56 @@ app_server <- function(input, output, session) {
     # Préparer les données pour l'affichage
     results_df <- catalog_results()
     
-    # Vérifier quelles colonnes sont disponibles
-    available_cols <- colnames(results_df)
+    # Colonnes principales à afficher
+    main_cols <- c("source", "title", "description")
+    main_cols <- main_cols[main_cols %in% colnames(results_df)]
     
-    # Colonnes préférées à afficher (dans l'ordre)
-    # Pour SSE, on a aussi id, agencyID, version
-    # Pour Opendata.swiss, on a organization, author, publisher, description, num_resources
-    preferred_cols <- c("title", "number_bfs", "id", "organization", "author", "publisher", "description", "num_resources", "publication_date", "language_available", "language", "number_asset", "agencyID", "version")
+    # Toutes les autres colonnes pour le tooltip (exclure id et les colonnes principales)
+    all_cols <- colnames(results_df)
+    tooltip_cols <- setdiff(all_cols, c("id", main_cols))
     
-    # Sélectionner les colonnes disponibles
-    cols_to_show <- preferred_cols[preferred_cols %in% available_cols]
+    # Sélectionner uniquement les colonnes principales
+    display_data <- results_df |> 
+      dplyr::select(dplyr::any_of(main_cols))
     
-    # Si aucune colonne préférée n'est trouvée, utiliser toutes les colonnes disponibles
-    if (length(cols_to_show) == 0) {
-      cols_to_show <- available_cols
+    # Créer les tooltips avec les informations supplémentaires
+    tooltip_data <- results_df |>
+      dplyr::select(dplyr::any_of(tooltip_cols))
+    
+    # Fonction pour créer le contenu du tooltip pour une ligne
+    create_tooltip_text <- function(row_idx) {
+      if (nrow(tooltip_data) == 0 || row_idx > nrow(tooltip_data)) {
+        return("")
+      }
+      
+      row_data <- tooltip_data[row_idx, , drop = FALSE]
+      tooltip_lines <- character(0)
+      
+      for (col in colnames(row_data)) {
+        val <- row_data[[col]]
+        if (!is.null(val) && !is.na(val)) {
+          val_str <- as.character(val)
+          if (val_str != "" && val_str != "NA") {
+            col_name <- gsub("_", " ", col)
+            col_name <- tools::toTitleCase(col_name)
+            # Limiter la longueur pour éviter des tooltips trop longs
+            if (nchar(val_str) > 150) {
+              val_str <- paste0(substr(val_str, 1, 147), "...")
+            }
+            tooltip_lines <- c(tooltip_lines, paste0(col_name, ": ", val_str))
+          }
+        }
+      }
+      
+      if (length(tooltip_lines) > 0) {
+        return(paste(tooltip_lines, collapse = "\\n"))
+      } else {
+        return("")
+      }
     }
     
-    # Sélectionner les colonnes (utiliser any_of pour éviter les erreurs si colonnes manquantes)
-    display_data <- results_df |> 
-      dplyr::select(dplyr::any_of(cols_to_show))
+    # Préparer les données JSON pour JavaScript
+    tooltip_json <- jsonlite::toJSON(tooltip_data, na = "null")
     
     # Renommer les colonnes pour un affichage plus lisible
     new_names <- colnames(display_data)
@@ -224,7 +275,7 @@ app_server <- function(input, output, session) {
     new_names <- tools::toTitleCase(new_names)
     colnames(display_data) <- new_names
     
-    # Créer le tableau DataTable
+    # Créer le tableau DataTable avec callback pour ajouter les tooltips
     DT::datatable(
       display_data,
       selection = "single",
@@ -237,7 +288,43 @@ app_server <- function(input, output, session) {
           emptyTable = "Aucune donnée disponible",
           loadingRecords = "Chargement...",
           processing = "Traitement en cours..."
-        )
+        ),
+        # Callback pour ajouter les tooltips après le rendu
+        drawCallback = DT::JS(paste0("
+          function(settings) {
+            var api = this.api();
+            var rows = api.rows({page: 'current'}).nodes();
+            var tooltipData = ", tooltip_json, ";
+            var dataIndex = 0;
+            
+            $(rows).each(function() {
+              var row = $(this);
+              var rowIndex = api.row(this).index();
+              
+              if (tooltipData && tooltipData[rowIndex]) {
+                var tooltipLines = [];
+                var rowData = tooltipData[rowIndex];
+                
+                for (var key in rowData) {
+                  if (rowData.hasOwnProperty(key) && rowData[key] !== null && rowData[key] !== '' && rowData[key] !== undefined) {
+                    var keyName = key.replace(/_/g, ' ').replace(/\\b\\w/g, function(l) { return l.toUpperCase(); });
+                    var value = String(rowData[key]);
+                    if (value.length > 150) {
+                      value = value.substring(0, 147) + '...';
+                    }
+                    tooltipLines.push(keyName + ': ' + value);
+                  }
+                }
+                
+                if (tooltipLines.length > 0) {
+                  var tooltipText = tooltipLines.join('\\n');
+                  row.attr('title', tooltipText);
+                  row.css('cursor', 'help');
+                }
+              }
+            });
+          }
+        "))
       ),
       rownames = FALSE,
       escape = FALSE
@@ -253,11 +340,25 @@ app_server <- function(input, output, session) {
       # Changer vers l'onglet de configuration
       updateTabsetPanel(session, "main_tabs", selected = "Configuration des filtres")
       
-      # Charger les métadonnées selon le type d'API
-      if (input$api_type == "sse") {
+      # Déterminer le type de source à partir de la colonne "source"
+      dataset_source <- if ("source" %in% names(selected_row)) {
+        selected_row$source
+      } else {
+        # Fallback: déterminer à partir des colonnes disponibles
+        if ("agencyID" %in% names(selected_row) || "version" %in% names(selected_row)) {
+          "Swiss Stats Explorer"
+        } else if ("organization" %in% names(selected_row) || "author" %in% names(selected_row)) {
+          "Opendata.swiss"
+        } else {
+          "BFS Catalog"
+        }
+      }
+      
+      # Charger les métadonnées selon le type de source
+      if (dataset_source == "Swiss Stats Explorer") {
         # Pour SSE, charger directement le codelist
         load_sse_metadata(selected_row$number_bfs)
-      } else if (input$api_type == "opendata") {
+      } else if (dataset_source == "Opendata.swiss") {
         # Pour Opendata.swiss, charger les détails du package
         load_opendata_package(selected_row$number_bfs)  # number_bfs contient l'id
       } else {
@@ -332,7 +433,8 @@ app_server <- function(input, output, session) {
     
     dataset <- selected_dataset()
     
-    if (input$api_type == "opendata" && !is.null(opendata_package())) {
+    dataset_source <- get_dataset_source(dataset)
+    if (dataset_source == "Opendata.swiss" && !is.null(opendata_package())) {
       # Pour Opendata.swiss, afficher plus d'informations
       package <- opendata_package()
       
@@ -408,10 +510,21 @@ app_server <- function(input, output, session) {
     }
   })
   
+  # Affichage conditionnel du bouton de requête
+  output$query_button_ui <- renderUI({
+    dataset_source <- get_dataset_source()
+    if (!is.null(dataset_source) && dataset_source != "Opendata.swiss") {
+      return(actionButton("query_btn", "Interroger les données", class = "btn-success", width = "100%"))
+    } else {
+      return(NULL)
+    }
+  })
+  
   # Génération dynamique des filtres
   output$dynamic_filters <- renderUI({
-    # Vérifier le type d'API
-    if (input$api_type == "opendata") {
+    # Vérifier le type de source
+    dataset_source <- get_dataset_source()
+    if (dataset_source == "Opendata.swiss") {
       # Pour Opendata.swiss, afficher les ressources disponibles
       req(opendata_package())
       
@@ -637,7 +750,7 @@ app_server <- function(input, output, session) {
         ),
         resources_ui
       )
-    } else if (input$api_type == "sse") {
+    } else if (dataset_source == "Swiss Stats Explorer") {
       # Pour SSE, utiliser le codelist
       req(sse_codelist())
       
@@ -746,7 +859,8 @@ app_server <- function(input, output, session) {
     showNotification("Interrogation des données...", type = "message")
     
     tryCatch({
-      if (input$api_type == "sse") {
+      dataset_source <- get_dataset_source()
+      if (dataset_source == "Swiss Stats Explorer") {
         # Pour SSE
         req(sse_codelist())
         req(selected_dataset())
@@ -928,8 +1042,9 @@ app_server <- function(input, output, session) {
     dataset <- selected_dataset()
     number_bfs <- dataset$number_bfs
     
-    # Construire le code R selon le type d'API
-    if (input$api_type == "sse") {
+    # Construire le code R selon le type de source
+    dataset_source <- get_dataset_source(dataset)
+    if (dataset_source == "Swiss Stats Explorer") {
       # Code pour Swiss Stats Explorer
       code_lines <- c(
         "# Charger les données du Swiss Stats Explorer (SSE)",
@@ -1153,8 +1268,9 @@ app_server <- function(input, output, session) {
     dataset <- selected_dataset()
     number_bfs <- dataset$number_bfs
     
-    # Générer le code selon le type d'API
-    if (input$api_type == "sse") {
+    # Générer le code selon le type de source
+    dataset_source <- get_dataset_source(dataset)
+    if (dataset_source == "Swiss Stats Explorer") {
       code_lines <- c(
         "library(BFS)",
         "library(dplyr)",
