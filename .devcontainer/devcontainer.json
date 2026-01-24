@@ -24,7 +24,7 @@
     }
   },
 
-  "postCreateCommand": "Rscript --vanilla -e 'if (!requireNamespace(\"renv\", quietly = TRUE)) install.packages(\"renv\", repos = \"https://cloud.r-project.org\"); if (file.exists(\"renv.lock\")) renv::restore()'",
+  "postCreateCommand": "if [ -f .env ]; then export $(cat .env | grep -v '^#' | xargs); fi && Rscript --vanilla -e 'if (!requireNamespace(\"renv\", quietly = TRUE)) install.packages(\"renv\", repos = \"https://cloud.r-project.org\"); if (file.exists(\"renv.lock\")) renv::restore()'",
   
   "forwardPorts": [3838],
   "portsAttributes": {
@@ -36,7 +36,8 @@
 
   "remoteUser": "root",
   "remoteEnv": {
-    "RENV_PATHS_ROOT": "/renv"
+    "RENV_PATHS_ROOT": "/renv",
+    "GITHUB_PAT": "${localEnv:GITHUB_PAT}"
   },
 
   // --- CORRECTION ICI ---
