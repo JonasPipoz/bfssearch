@@ -28,7 +28,8 @@ app_ui <- function(request) {
             choices = list(
               "BFS Catalog (PXWeb)" = "catalog",
               "Swiss Stats Explorer" = "sse",
-              "Opendata.swiss" = "opendata"
+              "Opendata.swiss" = "opendata",
+              "geocat.ch" = "geocat"
             ),
             selected = "catalog"
           ),

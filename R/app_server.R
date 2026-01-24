@@ -32,6 +32,8 @@ app_server <- function(input, output, session) {
       return("Swiss Stats Explorer")
     } else if ("organization" %in% names(dataset) || "author" %in% names(dataset)) {
       return("Opendata.swiss")
+    } else if ("subject" %in% names(dataset) || "abstract" %in% names(dataset)) {
+      return("geocat.ch")
     } else {
       return("BFS Catalog")
     }
@@ -44,6 +46,7 @@ app_server <- function(input, output, session) {
   metadata_tidy <- reactiveVal(NULL)
   sse_codelist <- reactiveVal(NULL)  # Pour SSE
   opendata_package <- reactiveVal(NULL)  # Pour Opendata.swiss
+  geocat_record <- reactiveVal(NULL)  # Pour geocat.ch
   query_dimensions <- reactiveVal(NULL)
   queried_data <- reactiveVal(NULL)
   
@@ -156,6 +159,35 @@ app_server <- function(input, output, session) {
           "Erreur inconnue"
         }
         showNotification(paste("Erreur Opendata.swiss:", error_msg), type = "error")
+      })
+    }
+    
+    # Recherche dans geocat.ch
+    if ("geocat" %in% input$active_catalogs) {
+      tryCatch({
+        showNotification("Recherche dans geocat.ch...", type = "message")
+        results <- search_geocat(keyword = search_keyword, language = "fr", limit = input$limit)
+        
+        if (!is.null(results) && nrow(results) > 0) {
+          results_formatted <- results |>
+            dplyr::mutate(
+              title = title,
+              number_bfs = id,
+              publication_date = Sys.Date(),
+              language_available = "fr",
+              source = "geocat.ch"
+            ) |>
+            dplyr::select(dplyr::any_of(c("title", "number_bfs", "abstract", "subject", "id", "source")))
+          
+          all_results[["geocat"]] <- results_formatted
+        }
+      }, error = function(e) {
+        error_msg <- if (!is.null(e$message) && nchar(trimws(e$message)) > 0) {
+          trimws(e$message)
+        } else {
+          "Erreur inconnue"
+        }
+        showNotification(paste("Erreur geocat.ch:", error_msg), type = "error")
       })
     }
     
@@ -345,14 +377,16 @@ app_server <- function(input, output, session) {
       dataset_source <- if ("source" %in% names(selected_row)) {
         selected_row$source
       } else {
-        # Fallback: déterminer à partir des colonnes disponibles
-        if ("agencyID" %in% names(selected_row) || "version" %in% names(selected_row)) {
-          "Swiss Stats Explorer"
-        } else if ("organization" %in% names(selected_row) || "author" %in% names(selected_row)) {
-          "Opendata.swiss"
-        } else {
-          "BFS Catalog"
-        }
+      # Fallback: déterminer à partir des colonnes disponibles
+      if ("agencyID" %in% names(selected_row) || "version" %in% names(selected_row)) {
+        "Swiss Stats Explorer"
+      } else if ("organization" %in% names(selected_row) || "author" %in% names(selected_row)) {
+        "Opendata.swiss"
+      } else if ("subject" %in% names(selected_row) || "abstract" %in% names(selected_row)) {
+        "geocat.ch"
+      } else {
+        "BFS Catalog"
+      }
       }
       
       # Charger les métadonnées selon le type de source
@@ -362,6 +396,12 @@ app_server <- function(input, output, session) {
       } else if (dataset_source == "Opendata.swiss") {
         # Pour Opendata.swiss, charger les détails du package
         load_opendata_package(selected_row$number_bfs)  # number_bfs contient l'id
+      } else if (dataset_source == "geocat.ch") {
+        # Pour geocat.ch, charger les détails complets
+        load_geocat_metadata(selected_row$number_bfs)  # number_bfs contient l'id
+      } else if (dataset_source == "geocat.ch") {
+        # Pour geocat.ch, charger les détails complets
+        load_geocat_metadata(selected_row$number_bfs)  # number_bfs contient l'id
       } else {
         # Pour BFS Catalog, charger les métadonnées normales
         load_metadata(selected_row$number_bfs)
@@ -403,6 +443,23 @@ app_server <- function(input, output, session) {
     }, error = function(e) {
       showNotification(paste("Erreur lors du chargement:", e$message), type = "error")
       opendata_package(NULL)
+    })
+  }
+  
+  # Fonction pour charger les métadonnées geocat.ch
+  load_geocat_metadata <- function(record_id) {
+    showNotification("Chargement des détails du dataset geocat.ch...", type = "message")
+    
+    tryCatch({
+      # Charger les détails complets du record
+      record_xml <- get_geocat_record(record_id, language = "fr")
+      
+      geocat_record(record_xml)
+      showNotification("Détails du dataset chargés avec succès", type = "message")
+      
+    }, error = function(e) {
+      showNotification(paste("Erreur lors du chargement:", e$message), type = "error")
+      geocat_record(NULL)
     })
   }
   
@@ -496,6 +553,36 @@ app_server <- function(input, output, session) {
           div_elements
         )
       )
+    } else if (dataset_source == "geocat.ch") {
+      # Pour geocat.ch, afficher les informations disponibles
+      div_elements <- list(
+        tags$p(tags$strong("Titre:"), dataset$title),
+        tags$p(tags$strong("ID:"), dataset$number_bfs)
+      )
+      
+      # Ajouter l'abstract si disponible
+      if ("abstract" %in% names(dataset) && !is.null(dataset$abstract) && nchar(trimws(dataset$abstract)) > 0) {
+        div_elements[[length(div_elements) + 1]] <- tags$p(tags$strong("Résumé:"), tags$br(), dataset$abstract)
+      }
+      
+      # Ajouter les sujets si disponibles
+      if ("subject" %in% names(dataset) && !is.null(dataset$subject) && nchar(trimws(dataset$subject)) > 0) {
+        div_elements[[length(div_elements) + 1]] <- tags$p(tags$strong("Mots-clés:"), dataset$subject)
+      }
+      
+      tagList(
+        h4("Dataset sélectionné"),
+        tags$div(
+          class = "well",
+          div_elements
+        ),
+        tags$p(
+          tags$small(
+            "Note: geocat.ch est un catalogue de métadonnées géographiques. ",
+            "Les données peuvent nécessiter un accès spécialisé pour être téléchargées."
+          )
+        )
+      )
     } else {
       # Pour BFS Catalog et SSE
       tagList(
@@ -514,7 +601,7 @@ app_server <- function(input, output, session) {
   # Affichage conditionnel du bouton de requête
   output$query_button_ui <- renderUI({
     dataset_source <- get_dataset_source()
-    if (!is.null(dataset_source) && dataset_source != "Opendata.swiss") {
+    if (!is.null(dataset_source) && dataset_source != "Opendata.swiss" && dataset_source != "geocat.ch") {
       return(actionButton("query_btn", "Interroger les données", class = "btn-success", width = "100%"))
     } else {
       return(NULL)
@@ -525,7 +612,25 @@ app_server <- function(input, output, session) {
   output$dynamic_filters <- renderUI({
     # Vérifier le type de source
     dataset_source <- get_dataset_source()
-    if (dataset_source == "Opendata.swiss") {
+    if (dataset_source == "geocat.ch") {
+      # Pour geocat.ch, afficher un message informatif
+      req(geocat_record())
+      tagList(
+        tags$div(
+          class = "alert alert-info",
+          tags$h5("Métadonnées geocat.ch"),
+          tags$p("Les métadonnées complètes sont disponibles. ",
+                 "Pour télécharger les données, veuillez consulter le catalogue geocat.ch directement."),
+          tags$p(tags$strong("ID du record:"), selected_dataset()$number_bfs),
+          tags$a(
+            href = paste0("https://www.geocat.ch/geonetwork/srv/fre/catalog.search#/metadata/", selected_dataset()$number_bfs),
+            target = "_blank",
+            "Voir sur geocat.ch",
+            class = "btn btn-primary"
+          )
+        )
+      )
+    } else if (dataset_source == "Opendata.swiss") {
       # Pour Opendata.swiss, afficher les ressources disponibles
       req(opendata_package())
       

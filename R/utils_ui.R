@@ -31,14 +31,16 @@ get_sse_modal <- function() {
             tags$br(),
             tags$strong("Langues acceptées :"),
             " La recherche fonctionne avec des mots-clés en ",
-            tags$strong("anglais"), " ou ", tags$strong("allemand"), 
-            " (les noms des datasets sont principalement en anglais).",
+            tags$strong("français"), ", ", tags$strong("allemand"), 
+            ", ", tags$strong("italien"), " ou ", tags$strong("anglais"), 
+            " (les noms des datasets sont disponibles dans les 4 langues).",
             tags$br(),
             tags$small(
               tags$strong("Exemples :"), 
-              tags$code("housing"), ", ", tags$code("population"), 
-              ", ", tags$code("education"), ", ", tags$code("Wohnung"), 
-              ", ", tags$code("Bevölkerung"), " etc."
+              tags$code("logement"), ", ", tags$code("population"), 
+              ", ", tags$code("éducation"), ", ", tags$code("Wohnung"), 
+              ", ", tags$code("Bevölkerung"), ", ", tags$code("abitazione"),
+              ", ", tags$code("housing"), " etc."
             )
           ),
           tags$hr(),
