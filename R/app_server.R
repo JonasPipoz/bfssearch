@@ -49,6 +49,7 @@ app_server <- function(input, output, session) {
   geocat_record <- reactiveVal(NULL)  # Pour geocat.ch
   query_dimensions <- reactiveVal(NULL)
   queried_data <- reactiveVal(NULL)
+  ai_visualizations <- reactiveVal(NULL)  # Pour stocker les visualisations générées
   
   # Observer pour réinitialiser les résultats lors du changement de catalogues actifs
   observeEvent(input$active_catalogs, {
@@ -1493,5 +1494,101 @@ app_server <- function(input, output, session) {
     # Utiliser JavaScript pour copier dans le presse-papiers
     session$sendCustomMessage("copyToClipboard", code_text)
     showNotification("Code copié dans le presse-papiers!", type = "message")
+  })
+  
+  # Vérifier si des données sont chargées pour l'onglet Visualisation
+  output$has_queried_data <- reactive({
+    !is.null(queried_data()) && nrow(queried_data()) > 0
+  })
+  outputOptions(output, "has_queried_data", suspendWhenHidden = FALSE)
+  
+  # Générer des visualisations avec l'AI
+  observeEvent(input$generate_visualizations_btn, {
+    # Vérifier que des données sont disponibles
+    if (is.null(queried_data()) || nrow(queried_data()) == 0) {
+      showNotification("Veuillez d'abord charger des données dans l'onglet 'Données'", type = "warning")
+      return()
+    }
+    
+    # Vérifier les identifiants
+    if (is.null(input$infomaniak_api_token) || trimws(input$infomaniak_api_token) == "" ||
+        is.null(input$infomaniak_product_id) || trimws(input$infomaniak_product_id) == "") {
+      showNotification("Veuillez configurer votre API Token et Product ID Infomaniak", type = "warning")
+      return()
+    }
+    
+    showNotification("Génération des visualisations en cours...", type = "message")
+    ai_visualizations(NULL)  # Réinitialiser
+    
+    # Appeler l'API Infomaniak
+    result <- call_infomaniak_ai(
+      data = queried_data(),
+      api_token = input$infomaniak_api_token,
+      product_id = input$infomaniak_product_id
+    )
+    
+    if (!result$success) {
+      showNotification(paste("Erreur:", result$error), type = "error")
+      return()
+    }
+    
+    # Exécuter le code généré
+    exec_result <- execute_visualization_code(result$code, queried_data())
+    
+    if (!exec_result$success) {
+      showNotification(paste("Erreur lors de l'exécution:", exec_result$error), type = "error")
+      return()
+    }
+    
+    # Stocker les visualisations
+    ai_visualizations(exec_result$plots)
+    showNotification(paste("Visualisations générées avec succès! (", length(exec_result$plots), " graphiques)"), type = "message")
+  })
+  
+  # Observer pour créer les outputs dynamiques des visualisations
+  observe({
+    plots <- ai_visualizations()
+    if (!is.null(plots) && length(plots) > 0) {
+      # Créer un output pour chaque visualisation
+      for (i in seq_along(plots)) {
+        output_id <- paste0("ai_plot_", i)
+        local({
+          my_i <- i
+          my_plot <- plots[[my_i]]
+          output[[output_id]] <- plotly::renderPlotly({
+            my_plot
+          })
+        })
+      }
+    }
+  })
+  
+  # Afficher les visualisations
+  output$ai_visualizations <- renderUI({
+    req(ai_visualizations())
+    
+    plots <- ai_visualizations()
+    if (is.null(plots) || length(plots) == 0) {
+      return(tags$p("Aucune visualisation disponible"))
+    }
+    
+    # Créer un UI pour chaque visualisation
+    plot_outputs <- lapply(seq_along(plots), function(i) {
+      plot_name <- names(plots)[i]
+      if (is.null(plot_name) || plot_name == "") {
+        plot_name <- paste0("Visualisation ", i)
+      }
+      
+      output_id <- paste0("ai_plot_", i)
+      
+      tags$div(
+        class = "well",
+        style = "margin-bottom: 20px;",
+        tags$h4(plot_name),
+        plotly::plotlyOutput(output_id, height = "500px")
+      )
+    })
+    
+    do.call(tagList, plot_outputs)
   })
 }

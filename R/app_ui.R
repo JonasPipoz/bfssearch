@@ -189,6 +189,74 @@ app_ui <- function(request) {
                 tags$li("Exécutez le code pour charger les données")
               )
             )
+          ),
+          
+          # Onglet 5: Visualisation
+          tabPanel(
+            "Visualisation",
+            br(),
+            tags$div(
+              class = "alert alert-warning",
+              tags$h5("Configuration API Infomaniak"),
+              tags$p("Pour générer des visualisations automatiques, vous devez configurer vos identifiants API Infomaniak."),
+              tags$p(
+                tags$strong("Comment obtenir vos identifiants :"),
+                tags$ol(
+                  tags$li("Créez un token API sur ", tags$a(href = "https://manager.infomaniak.com/v3/ng/profile/user/token/list", target = "_blank", "Infomaniak Manager")),
+                  tags$li("Sélectionnez le produit AI approprié"),
+                  tags$li("Copiez votre API Token"),
+                  tags$li("Notez votre Product ID")
+                )
+              )
+            ),
+            br(),
+            tags$div(
+              class = "well",
+              tags$h4("Identifiants API Infomaniak"),
+              passwordInput(
+                "infomaniak_api_token",
+                label = "API Token",
+                placeholder = "Votre API Token Infomaniak",
+                width = "100%"
+              ),
+              textInput(
+                "infomaniak_product_id",
+                label = "Product ID",
+                placeholder = "Votre Product ID",
+                width = "100%"
+              ),
+              tags$small(
+                style = "color: #666;",
+                "Ces informations sont stockées localement dans votre session et ne sont pas transmises ailleurs."
+              )
+            ),
+            br(),
+            conditionalPanel(
+              condition = "output.has_queried_data",
+              tags$div(
+                tags$h4("Générer des visualisations"),
+                tags$p("L'IA analysera vos données et proposera plusieurs visualisations avec plotly."),
+                actionButton(
+                  "generate_visualizations_btn",
+                  "🎨 Générer des visualisations",
+                  class = "btn-success",
+                  style = "width: 100%; margin-bottom: 15px;"
+                ),
+                br(),
+                shinycssloaders::withSpinner(
+                  uiOutput("ai_visualizations"),
+                  type = 4,
+                  color = "#0dc5c1"
+                )
+              )
+            ),
+            conditionalPanel(
+              condition = "!output.has_queried_data",
+              tags$div(
+                class = "alert alert-info",
+                tags$p("Veuillez d'abord charger des données dans l'onglet 'Données' avant de générer des visualisations.")
+              )
+            )
           )
         )
       )

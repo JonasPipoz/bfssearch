@@ -22,7 +22,8 @@ Imports:
     tools,
     httr,
     jsonlite,
-    xml2
+    xml2,
+    plotly
 Suggests:
     testthat (>= 3.0.0),
     covr
